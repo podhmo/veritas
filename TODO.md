@@ -133,3 +133,6 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 5.3.1: Thoroughly document the new Go code generation workflow, including `go:generate` examples.
     -   [x] 5.3.2: Update the main `README.md` and example projects to reflect Go code generation as the recommended approach.
     -   [x] 5.3.3: Ensure tests cover the end-to-end code generation and validation process.
+-   **[x] 5.4: Use singlegenerator for code generation**
+    -   [x] 5.4.1: Refactor the code generation to use `singlegenerator`.
+    -   [x] 5.4.2: Add tests for the new code generation implementation.

@@ -1,0 +1,21 @@
+package a
+
+import (
+	"github.com/podhmo/veritas"
+)
+
+func init() {
+	veritas.Register("github.com/podhmo/veritas/cmd/veritas/gen/testdata/src/a.User", veritas.ValidationRuleSet{
+		TypeRules: []string{
+			`self.Email != ""`,
+		},
+		FieldRules: map[string][]string{
+			"Email": {
+				`self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`,
+			},
+			"Name": {
+				`self != ""`,
+			},
+		},
+	})
+}
