@@ -17,7 +17,7 @@ func TestCustomFunctions(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
 	// Engine is not used directly, but its creation could be part of a setup.
-	_, err := NewEngine(logger)
+	_, err := NewEngine(logger, DefaultFunctions()...)
 	if err != nil {
 		t.Fatalf("NewEngine() failed: %v", err)
 	}
