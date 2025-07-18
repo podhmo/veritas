@@ -1,0 +1,19 @@
+{
+  "User": {
+    "fieldRules": {
+      "Name": [
+        "size(self) > 0"
+      ],
+      "Email": [
+  "custom.matches(self, '^[^@]+@[^@]+\\\\.[^@]+$')"
+      ],
+      "NonExistentField": [
+        "self > 0"
+      ]
+    },
+    "typeRules": [
+      "self.Name != self.Email",
+"1 +"
+    ]
+  }
+}
