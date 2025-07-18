@@ -100,7 +100,7 @@ func (v *Validator) Validate(obj any) error {
 		out, _, err := prog.Eval(vars)
 		if err != nil {
 			v.logger.Error("failed to evaluate rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-			return NewValidationError(typeName, fieldName, "evaluation error")
+			return NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err))
 		}
 
 		if valid, ok := out.Value().(bool); !ok || !valid {
