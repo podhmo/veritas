@@ -105,12 +105,14 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   **[ ] 4.3: Documentation and Ecosystem**
     -   [ ] 4.3.1: Create a comprehensive documentation website detailing installation, usage, CLI commands, and all supported rules/shorthands.
-    -   [ ] 4.3.2: Develop an example project demonstrating integration with a standard `net/http` server.
-        -   [ ] 4.3.2.1: Show how to decode a JSON request, run validation, and return a structured HTTP 400 error response.
-        -   [ ] 4.3.2.2: Use `slog` for structured request logging.
+    -   [x] 4.3.2: Develop an example project demonstrating integration with a standard `net/http` server.
+    -   [x] 4.3.2.1: Show how to decode a JSON request, run validation, and return a structured HTTP 400 error response.
+    -   [x] 4.3.2.2: Use `slog` for structured request logging.
+    -   [ ] 4.3.3: **[TODO]** Investigate and fix the CEL `matches` function's regular expression parsing issue. The current workaround is to use `contains('@')`.
+    -   [ ] 4.3.4: **[TODO]** Improve the `veritas` CLI to handle type name resolution for the `main` package to avoid duplicating rules in `rules.json`. A new command line option like `--package-prefix-map` should be considered.
 
 -   **[ ] 4.4: Final API Review and Testing**
-    -   [ ] 4.4.1: Implement end-to-end tests for the `net/http` example.
+    -   [x] 4.4.1: Implement end-to-end tests for the `net/http` example.
     -   [ ] 4.4.2: Conduct a final review of all public APIs to ensure stability for the v1.0 release.
 
 ## Phase 5: Go Code Generation (v1.1 / v2.0)
