@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/google/cel-go/cel"
-	"github.com/hashicorp/golang-lru/v2"
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // Engine is the core component that manages the CEL environment and program caching.
@@ -38,19 +38,31 @@ func NewEngine(logger *slog.Logger, funcs ...cel.EnvOption) (*Engine, error) {
 
 // getProgram compiles a CEL expression and returns a usable program.
 // It uses an LRU cache to avoid re-compiling frequently used expressions.
-func (e *Engine) getProgram(rule string) (cel.Program, error) {
+func (e *Engine) getProgram(rule string, vars ...cel.EnvOption) (cel.Program, error) {
+	// Note: Caching is tricky when variables can change.
+	// For this library's purpose, we assume the variable set for a given rule string is constant.
 	if prog, ok := e.cache.Get(rule); ok {
 		e.logger.Debug("cache hit", "rule", rule)
 		return prog, nil
 	}
 
 	e.logger.Debug("cache miss", "rule", rule)
-	ast, issues := e.env.Compile(rule)
+
+	env := e.env
+	var err error
+	if len(vars) > 0 {
+		env, err = e.env.Extend(vars...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	ast, issues := env.Compile(rule)
 	if issues != nil && issues.Err() != nil {
 		return nil, issues.Err()
 	}
 
-	prog, err := e.env.Program(ast)
+	prog, err := env.Program(ast)
 	if err != nil {
 		return nil, err
 	}

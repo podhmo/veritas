@@ -9,7 +9,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 1.1: `Engine` Implementation**
     -   [x] 1.1.1: Define an `Engine` struct that encapsulates `cel.Env` and an LRU cache (`lru.Cache`) for compiled `cel.Program`s.
     -   [x] 1.1.2: Use `log/slog` for internal tracing. Log cache misses and program generations at the `Debug` level.
-    -   [ ] 1.1.3: Implement a framework to register custom CEL functions (e.g., `strings.ToUpper`, `matches`).
+    -   [x] 1.1.3: Implement a framework to register custom CEL functions (e.g., `strings.ToUpper`, `matches`).
 
 -   **[ ] 1.2: `Validator` Implementation**
     -   [ ] 1.2.1: Define a `Validator` struct holding a reference to the `Engine` and a `map[string]ValidationRuleSet` for rule lookup by type name.
