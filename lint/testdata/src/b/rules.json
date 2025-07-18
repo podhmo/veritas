@@ -1,0 +1,12 @@
+{
+  "Product": {
+    "fieldRules": {
+      "Name": [
+        "size(self) > 0"
+      ],
+      "Price": [
+        "self > 0"
+      ]
+    }
+  }
+}

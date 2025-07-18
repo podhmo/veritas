@@ -1,0 +1,9 @@
+{
+  "Order": {
+    "fieldRules": {
+      "Amount": [
+        "self >"
+      ]
+    }
+  }
+}
