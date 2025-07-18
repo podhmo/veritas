@@ -5,7 +5,7 @@
         "size(self) > 0"
       ],
       "Email": [
-        "self.matches('^[^@]+@[^@]+\\.[^@]+$')"
+  "custom.matches(self, '^[^@]+@[^@]+\\\\.[^@]+$')"
       ],
       "NonExistentField": [
         "self > 0"
@@ -13,7 +13,7 @@
     },
     "typeRules": [
       "self.Name != self.Email",
-      "invalid cel syntax"
+"1 +"
     ]
   }
 }
