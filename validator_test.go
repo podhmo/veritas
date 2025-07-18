@@ -496,3 +496,99 @@ func TestValidator_Validate(t *testing.T) {
 		})
 	}
 }
+
+// setupBenchmark creates a standard validator setup for benchmarking.
+func setupBenchmark(b *testing.B) (*Validator, *sources.MockUser, *sources.MockUser) {
+	b.Helper()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})) // Use Warn to reduce noise
+	engine, err := NewEngine(logger, DefaultFunctions()...)
+	if err != nil {
+		b.Fatalf("NewEngine() failed: %v", err)
+	}
+
+	provider := NewJSONRuleProvider("testdata/rules/user.json")
+
+	adapters := map[string]TypeAdapter{
+		"sources.MockUser": mockUserAdapter,
+	}
+
+	validator, err := NewValidator(engine, provider, logger, adapters)
+	if err != nil {
+		b.Fatalf("NewValidator() failed: %v", err)
+	}
+
+	intPtr := func(i int) *int { return &i }
+	validUser := &sources.MockUser{
+		Name:  "Gopher",
+		Email: "gopher@golang.org",
+		Age:   20,
+		ID:    intPtr(1),
+	}
+	invalidUser := &sources.MockUser{
+		Name:  "",
+		Email: "invalid",
+		Age:   15,
+		ID:    nil,
+	}
+
+	return validator, validUser, invalidUser
+}
+
+func BenchmarkValidator_Validate_Valid_NoCache(b *testing.B) {
+	validator, validUser, _ := setupBenchmark(b)
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Invalidate cache on each run
+		validator.engine.programCache.Purge()
+		_ = validator.Validate(ctx, validUser)
+	}
+}
+
+func BenchmarkValidator_Validate_Valid_WithCache(b *testing.B) {
+	validator, validUser, _ := setupBenchmark(b)
+	ctx := context.Background()
+
+	// Prime the cache
+	_ = validator.Validate(ctx, validUser)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_ = validator.Validate(ctx, validUser)
+	}
+}
+
+func BenchmarkValidator_Validate_Invalid_NoCache(b *testing.B) {
+	validator, _, invalidUser := setupBenchmark(b)
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Invalidate cache on each run
+		validator.engine.programCache.Purge()
+		_ = validator.Validate(ctx, invalidUser)
+	}
+}
+
+func BenchmarkValidator_Validate_Invalid_WithCache(b *testing.B) {
+	validator, _, invalidUser := setupBenchmark(b)
+	ctx := context.Background()
+
+	// Prime the cache
+	_ = validator.Validate(ctx, invalidUser)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_ = validator.Validate(ctx, invalidUser)
+	}
+}
