@@ -23,12 +23,19 @@ The name "Veritas" is Latin for "truth." It was chosen to symbolize the library'
 go get github.com/podhmo/veritas
 ```
 
-## Quick Start (Conceptual)
+## Quick Start
+
+The recommended approach is to use Go code generation for a type-safe, high-performance validation experience.
 
 1.  **Annotate your structs:**
 
+    Add validation rules using struct tags and special `// @cel:` comments.
+
     ```go
-    package user
+    // file: models/user.go
+    package models
+
+    //go:generate go run github.com/podhmo/veritas/cmd/veritas -gen-type=User -out-name=veritas_gen.go
 
     // @cel: self.Password == self.PasswordConfirm
     type User struct {
@@ -40,39 +47,56 @@ go get github.com/podhmo/veritas
     }
     ```
 
-2.  **Generate rules:**
+2.  **Generate validation code:**
+
+    Use `go generate` to run the `veritas` tool. It will scan your struct and create a `veritas_gen.go` file in the same package.
 
     ```bash
-    go run github.com/podhmo/veritas/cmd/veritas -in ./... -out rules.json
+    go generate ./...
     ```
 
+    The generated file will contain an `init()` function that automatically registers your validation rules with the veritas library.
+
 3.  **Use the validator in your application:**
+
+    The validator can now be created without any special configuration. The rules are available globally.
 
     ```go
     package main
 
     import (
+        "context"
         "fmt"
+        "log"
+
         "github.com/podhmo/veritas"
+        "your-project/models" // Import the package with your models
     )
 
     func main() {
-        // Load rules from the generated JSON file
-        provider, err := veritas.NewJSONRuleProvider("rules.json")
+        // Create a new validator.
+        // Rules are automatically loaded from the generated code.
+        validator, err := veritas.NewValidator()
         if err != nil {
-            // ... handle error
+            log.Fatalf("Failed to create validator: %v", err)
         }
 
-        // Create a new validator
-        validator, err := veritas.NewValidator(provider)
-        if err != nil {
-            // ... handle error
+        // Create a user object to validate
+        user := models.User{
+            Name:            "Test User",
+            Email:           "test@example.com",
+            Age:             30,
+            Password:        "password123",
+            PasswordConfirm: "password123",
         }
 
-        // Validate an object
-        invalidUser := user.User{...}
-        if err := validator.Validate(invalidUser); err != nil {
-            fmt.Println(err)
+        // Validate the object
+        if err := validator.Validate(context.Background(), user); err != nil {
+            fmt.Printf("Validation failed: %v\n", err)
+        } else {
+            fmt.Println("Validation successful!")
         }
     }
     ```
+
+For more advanced use cases, such as loading rules from JSON files for dynamic environments, please refer to the documentation in the `docs` directory.

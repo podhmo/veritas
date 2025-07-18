@@ -27,28 +27,86 @@ type Validator struct {
 	logger    *slog.Logger
 }
 
-// NewValidator creates a new validator.
-// It requires a map of type names to TypeAdapter functions to handle object-to-map conversion.
-func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, adapters map[string]TypeAdapter) (*Validator, error) {
-	if provider == nil {
-		provider = NewRuleProviderFromRegistry()
+// ValidatorOption is an option for configuring a Validator.
+type ValidatorOption func(*validatorOptions)
+
+type validatorOptions struct {
+	engine   *Engine
+	provider RuleProvider
+	logger   *slog.Logger
+	adapters map[string]TypeAdapter
+}
+
+// WithEngine sets the CEL engine for the validator.
+func WithEngine(engine *Engine) ValidatorOption {
+	return func(o *validatorOptions) {
+		o.engine = engine
 	}
-	rules, err := provider.GetRuleSets()
+}
+
+// WithRuleProvider sets the rule provider for the validator.
+func WithRuleProvider(provider RuleProvider) ValidatorOption {
+	return func(o *validatorOptions) {
+		o.provider = provider
+	}
+}
+
+// WithLogger sets the logger for the validator.
+func WithLogger(logger *slog.Logger) ValidatorOption {
+	return func(o *validatorOptions) {
+		o.logger = logger
+	}
+}
+
+// WithTypeAdapters sets the type adapters for the validator.
+func WithTypeAdapters(adapters map[string]TypeAdapter) ValidatorOption {
+	return func(o *validatorOptions) {
+		for k, v := range adapters {
+			o.adapters[k] = v
+		}
+	}
+}
+
+// NewValidator creates a new validator with the given options.
+// If no rule provider is specified, it defaults to using the global registry.
+func NewValidator(opts ...ValidatorOption) (*Validator, error) {
+	// Default options
+	options := &validatorOptions{
+		logger:   slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
+		adapters: make(map[string]TypeAdapter),
+	}
+
+	// Apply user-provided options
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Default engine if not provided
+	if options.engine == nil {
+		engine, err := NewEngine(options.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create default engine: %w", err)
+		}
+		options.engine = engine
+	}
+
+	// Default provider if not provided
+	if options.provider == nil {
+		options.provider = NewRuleProviderFromRegistry()
+	}
+
+	rules, err := options.provider.GetRuleSets()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rule sets: %w", err)
 	}
 
 	for k := range rules {
-		logger.Debug("loaded rule", "key", k)
+		options.logger.Debug("loaded rule", "key", k)
 	}
 
-	// Start with the base options from the engine.
-	opts := make([]cel.EnvOption, len(engine.baseOpts))
-	copy(opts, engine.baseOpts)
-
 	// Environment for object-level validation where 'self' is a map.
-	objOpts := make([]cel.EnvOption, len(engine.baseOpts))
-	copy(objOpts, engine.baseOpts)
+	objOpts := make([]cel.EnvOption, len(options.engine.baseOpts))
+	copy(objOpts, options.engine.baseOpts)
 	objOpts = append(objOpts, cel.Variable("self", types.NewMapType(types.StringType, types.DynType)))
 	objectEnv, err := cel.NewEnv(objOpts...)
 	if err != nil {
@@ -56,8 +114,8 @@ func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, ad
 	}
 
 	// Environment for field-level validation where 'self' is a dynamic type.
-	fieldOpts := make([]cel.EnvOption, len(engine.baseOpts))
-	copy(fieldOpts, engine.baseOpts)
+	fieldOpts := make([]cel.EnvOption, len(options.engine.baseOpts))
+	copy(fieldOpts, options.engine.baseOpts)
 	fieldOpts = append(fieldOpts, cel.Variable("self", types.DynType))
 	fieldEnv, err := cel.NewEnv(fieldOpts...)
 	if err != nil {
@@ -65,12 +123,12 @@ func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, ad
 	}
 
 	return &Validator{
-		engine:    engine,
+		engine:    options.engine,
 		objectEnv: objectEnv,
 		fieldEnv:  fieldEnv,
 		rules:     rules,
-		adapters:  adapters,
-		logger:    logger,
+		adapters:  options.adapters,
+		logger:    options.logger,
 	}, nil
 }
 
@@ -372,39 +430,11 @@ func (v *Validator) getGenericTypeName(baseName string) (string, bool) {
 	return "", false
 }
 
-// ValidatorOption is an option for NewValidatorFromJSONFile.
-type ValidatorOption func(*Validator)
-
-// WithTypeAdapters sets the type adapters for the validator.
-func WithTypeAdapters(adapters map[string]TypeAdapter) ValidatorOption {
-	return func(v *Validator) {
-		for k, adapter := range adapters {
-			v.adapters[k] = adapter
-		}
-	}
-}
-
 // NewValidatorFromJSONFile creates a new validator from a JSON file.
-func NewValidatorFromJSONFile(filePath string, options ...ValidatorOption) (*Validator, error) {
-	// todo: from option
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
-	engine, err := NewEngine(logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create engine: %w", err)
-	}
+// It is a convenience function that wraps NewValidator with a JSONRuleProvider.
+func NewValidatorFromJSONFile(filePath string, opts ...ValidatorOption) (*Validator, error) {
 	provider := NewJSONRuleProvider(filePath)
-
-	// For now, we don't have a good way to infer adapters from JSON.
-	// We'll need to think about how to handle this.
-	adapters := map[string]TypeAdapter{}
-
-	v, err := NewValidator(engine, provider, logger, adapters)
-	if err != nil {
-		return nil, err
-	}
-	for _, opt := range options {
-		opt(v)
-	}
-	return v, nil
+	allOpts := []ValidatorOption{WithRuleProvider(provider)}
+	allOpts = append(allOpts, opts...)
+	return NewValidator(allOpts...)
 }
