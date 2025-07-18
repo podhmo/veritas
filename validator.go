@@ -128,6 +128,58 @@ func (v *Validator) Validate(obj any) error {
 	return nil
 }
 
+// getTypeName constructs a predictable type name string (e.g., "sources.User") from a reflect.Type.
+func (v *Validator) getTypeName(typ reflect.Type) string {
+	if pkgPath := typ.PkgPath(); pkgPath != "" {
+		parts := strings.Split(pkgPath, "/")
+		pkgName := parts[len(parts)-1]
+		return fmt.Sprintf("%s.%s", pkgName, typ.Name())
+	}
+	return typ.String() // Handle anonymous or built-in types
+}
+
+// dereferenceAndAdapt handles the crucial step of preparing a value for CEL evaluation.
+// It dereferences pointers and, if the underlying value is a struct with a registered
+// TypeAdapter, it uses the adapter to convert the struct to a map[string]any.
+func (v *Validator) dereferenceAndAdapt(value any) any {
+	rv := reflect.ValueOf(value)
+
+	// We only need to do something special for pointers.
+	if rv.Kind() != reflect.Ptr {
+		return value
+	}
+	if rv.IsNil() {
+		return nil // CEL handles nil as 'null'.
+	}
+
+	elem := rv.Elem()
+	elemInterface := elem.Interface()
+
+	// If the pointer points to a struct, try to adapt it.
+	if elem.Kind() == reflect.Struct {
+		typeName := v.getTypeName(elem.Type())
+		// Also check for the generic version of the type name.
+		if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
+			baseName := typeName[:genericMarkerPos]
+			if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
+				typeName = typeSpecName
+			}
+		}
+
+		if adapter, ok := v.adapters[typeName]; ok {
+			adapted, err := adapter(elemInterface)
+			if err == nil {
+				return adapted // Success! Return the map.
+			}
+			v.logger.Warn("TypeAdapter failed for value", "type", typeName, "error", err)
+		}
+	}
+
+	// For non-struct pointers, or if the adapter fails, return the dereferenced value.
+	return elemInterface
+}
+
+
 // validateRecursive is the internal helper that performs the actual validation.
 func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 	// Dereference pointer to get the actual value.
@@ -144,15 +196,7 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 		return
 	}
 	typ := val.Type()
-	var typeName string
-	pkgPath := typ.PkgPath()
-	if pkgPath != "" {
-		parts := strings.Split(pkgPath, "/")
-		pkgName := parts[len(parts)-1]
-		typeName = fmt.Sprintf("%s.%s", pkgName, typ.Name())
-	} else {
-		typeName = typ.String() // Handle anonymous structs
-	}
+	typeName := v.getTypeName(typ)
 
 	// Normalize generic type names for rule lookup.
 	// reflect.Type.Name() for "Box[string]" is "Box[string]".
@@ -192,7 +236,14 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 		}
 
 		// Apply type rules using the objectEnv.
-		objectVars := map[string]any{"self": objMap}
+		adaptedMapForTypeRules := make(map[string]any, len(objMap))
+		for k, val := range objMap {
+			adaptedMapForTypeRules[k] = val // Start with the original value
+			// For type rules, we need to adapt the values *within* the 'self' map.
+			adaptedMapForTypeRules[k] = v.dereferenceAndAdapt(val)
+		}
+		objectVars := map[string]any{"self": adaptedMapForTypeRules}
+
 		for _, rule := range ruleSet.TypeRules {
 			prog, err := v.engine.getProgram(v.objectEnv, rule)
 			if err != nil {
@@ -220,7 +271,11 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 				v.logger.Warn("field not found in adapted map", "field", fieldName, "type", typeName)
 				continue
 			}
-			fieldVars := map[string]any{"self": fieldVal}
+
+			// For field rules, 'self' is the field's value itself.
+			// We adapt it before passing it to CEL.
+			adaptedFieldVal := v.dereferenceAndAdapt(fieldVal)
+			fieldVars := map[string]any{"self": adaptedFieldVal}
 
 			for _, rule := range rules {
 				prog, err := v.engine.getProgram(v.fieldEnv, rule)

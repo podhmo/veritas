@@ -48,16 +48,8 @@ func boxAdapter(obj any) (map[string]any, error) {
 		return nil, fmt.Errorf("no 'Value' field in %T", obj)
 	}
 
-	fieldVal := field.Interface()
-
-	// Dereference pointers for CEL, but keep nil as is.
-	rv := reflect.ValueOf(fieldVal)
-	if rv.Kind() == reflect.Ptr && !rv.IsNil() {
-		fieldVal = rv.Elem().Interface()
-	}
-
 	return map[string]any{
-		"Value": fieldVal,
+		"Value": field.Interface(),
 	}, nil
 }
 
@@ -347,7 +339,8 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[*string]{
 				Value: nil,
 			},
-			wantErr: NewValidationError("sources.Box[T]", "Value", `self != null`),
+			wantErr:      NewValidationError("sources.Box[T]", "Value", `self != null`),
+			isMultiError: true, // Expect both type and field errors
 		},
 		{
 			name: "valid generic struct with struct pointer",
@@ -363,6 +356,21 @@ func TestValidator_Validate(t *testing.T) {
 			},
 			wantErr:      NewValidationError("sources.Item", "Name", `self != ""`),
 			isMultiError: true,
+		},
+		{
+			name: "valid generic struct with int pointer",
+			obj: &sources.Box[*int]{
+				Value: intPtr(123),
+			},
+			wantErr: nil,
+		},
+		{
+			name: "invalid generic struct with nil int pointer",
+			obj: &sources.Box[*int]{
+				Value: nil,
+			},
+			wantErr:      NewValidationError("sources.Box[T]", "Value", `self != null`),
+			isMultiError: true, // Expect both type and field errors
 		},
 	}
 
@@ -405,6 +413,15 @@ func TestValidator_Validate(t *testing.T) {
 					}
 					if !strings.Contains(errStr, handleRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", handleRuleError, errStr)
+					}
+				case "invalid generic struct with nil pointer", "invalid generic struct with nil int pointer":
+					typeRuleError := NewValidationError("sources.Box[T]", "", "self.Value != null").Error()
+					fieldRuleError := NewValidationError("sources.Box[T]", "Value", "self != null").Error()
+					if !strings.Contains(errStr, typeRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", typeRuleError, errStr)
+					}
+					if !strings.Contains(errStr, fieldRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", fieldRuleError, errStr)
 					}
 				}
 				return
