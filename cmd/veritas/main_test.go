@@ -11,49 +11,58 @@ import (
 	"github.com/podhmo/veritas"
 )
 
+// TestRun is an integration-style test for the main `run` function.
 func TestRun(t *testing.T) {
-	// Setup: Create a temporary directory for the output file.
-	tmpDir, err := os.MkdirTemp("", "veritas-test-")
+	// Create a temporary directory for test output.
+	tempDir, err := os.MkdirTemp("", "veritas-test-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tempDir)
 
 	// Define input and output paths.
 	inPath := "../../testdata/sources"
-	outFile := filepath.Join(tmpDir, "rules.json")
+	outFile := filepath.Join(tempDir, "rules.json")
+
+	// Logger for the test.
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	// Execute the run function.
+	// Execute the main logic.
 	if err := run(inPath, outFile, logger); err != nil {
-		t.Fatalf("run() failed: %v", err)
+		t.Fatalf("run() error = %v", err)
 	}
 
-	// Verify the output file was created.
-	_, err = os.Stat(outFile)
-	if os.IsNotExist(err) {
-		t.Fatalf("run() did not create the output file: %s", outFile)
-	}
-
-	// Verify the content of the output file.
+	// Read the generated file.
 	gotBytes, err := os.ReadFile(outFile)
 	if err != nil {
 		t.Fatalf("Failed to read output file: %v", err)
 	}
 
+	// Unmarshal the result into the expected structure.
 	var got map[string]veritas.ValidationRuleSet
 	if err := json.Unmarshal(gotBytes, &got); err != nil {
-		t.Fatalf("Failed to unmarshal output JSON: %v", err)
+		t.Fatalf("Failed to unmarshal generated JSON: %v", err)
 	}
 
 	// Define the expected output.
 	want := map[string]veritas.ValidationRuleSet{
+		"sources.Base": {
+			FieldRules: map[string][]string{
+				"ID": {`self != "" && self.size() > 1`},
+			},
+		},
+		"sources.EmbeddedUser": {
+			FieldRules: map[string][]string{
+				"ID":   {`self != "" && self.size() > 1`},
+				"Name": {`self != ""`},
+			},
+		},
 		"sources.MockUser": {
 			TypeRules: []string{"self.Age >= 18"},
 			FieldRules: map[string][]string{
 				"Name":  {`self != ""`},
 				"Email": {`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
-				"ID":    {`self != nil`},
+				"ID":    {`self != null`},
 			},
 		},
 		"sources.MockVariety": {
@@ -69,16 +78,16 @@ func TestRun(t *testing.T) {
 				"UserEmails": {`self.all(x, x.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$'))`},
 				"ResourceMap": {
 					`self.all(k, k.startsWith('id_'))`,
-					`self.all(v, v != nil)`,
+					`self.all(v, v != null)`,
 				},
-				"Users":  {`self.all(x, x != nil)`},
+				"Users":  {`self.all(x, x != null)`},
 				"Matrix": {`self.all(x, x.all(x, x != 0))`},
 			},
 		},
 		"sources.MockMoreComplexData": {
 			FieldRules: map[string][]string{
 				"ListOfMaps": {
-					`self.all(x, x != nil && x.all(k, k.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')) && x.all(v, v != ""))`,
+					`self.all(x, x.size() > 0 && x.all(k, k.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')) && x.all(v, v != ""))`,
 				},
 				"MapOfSlices": {
 					`self.all(k, k != "")`,
@@ -88,6 +97,7 @@ func TestRun(t *testing.T) {
 		},
 	}
 
+	// Compare the actual result with the expected result.
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("run() output mismatch (-want +got):\n%s", diff)
 	}

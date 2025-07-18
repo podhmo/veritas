@@ -7,42 +7,17 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/podhmo/veritas/testdata/sources"
 )
-
-// MockUser is a test struct.
-type MockUser struct {
-	Name  string
-	Email string
-	Age   int
-}
-
-// MockAddress is a nested struct.
-type MockAddress struct {
-	Street string
-	City   string
-}
-
-// MockProfile has a nested struct.
-type MockProfile struct {
-	Title   string
-	Address *MockAddress
-}
-
-// MockUserWithProfile contains a nested struct with validation rules.
-type MockUserWithProfile struct {
-	Name    string
-	Email   string
-	Age     int
-	Profile *MockProfile
-}
 
 // mockUserAdapter converts a MockUser object (or a pointer to it) to a map.
 func mockUserAdapter(obj any) (map[string]any, error) {
-	var user *MockUser
+	var user *sources.MockUser
 	switch v := obj.(type) {
-	case MockUser:
+	case sources.MockUser:
 		user = &v
-	case *MockUser:
+	case *sources.MockUser:
 		user = v
 	default:
 		return nil, fmt.Errorf("unsupported type for MockUser adapter: %T", obj)
@@ -52,61 +27,27 @@ func mockUserAdapter(obj any) (map[string]any, error) {
 		"Name":  user.Name,
 		"Email": user.Email,
 		"Age":   user.Age,
+		"ID":    user.ID,
+		"URL":   user.URL,
 	}, nil
 }
 
-// mockUserWithProfileAdapter converts a MockUserWithProfile to a map.
-func mockUserWithProfileAdapter(obj any) (map[string]any, error) {
-	var user *MockUserWithProfile
+func embeddedUserAdapter(obj any) (map[string]any, error) {
+	var u *sources.EmbeddedUser
 	switch v := obj.(type) {
-	case MockUserWithProfile:
-		user = &v
-	case *MockUserWithProfile:
-		user = v
+	case sources.EmbeddedUser:
+		u = &v
+	case *sources.EmbeddedUser:
+		u = v
 	default:
 		return nil, fmt.Errorf("unsupported type for adapter: %T", obj)
 	}
 	return map[string]any{
-		"Name":    user.Name,
-		"Email":   user.Email,
-		"Age":     user.Age,
-		"Profile": user.Profile, // Keep the nested struct as is for now
+		"ID":   u.ID,
+		"Name": u.Name,
 	}, nil
 }
 
-// mockProfileAdapter converts a MockProfile to a map.
-func mockProfileAdapter(obj any) (map[string]any, error) {
-	var p *MockProfile
-	switch v := obj.(type) {
-	case MockProfile:
-		p = &v
-	case *MockProfile:
-		p = v
-	default:
-		return nil, fmt.Errorf("unsupported type for adapter: %T", obj)
-	}
-	return map[string]any{
-		"Title":   p.Title,
-		"Address": p.Address,
-	}, nil
-}
-
-// mockAddressAdapter converts a MockAddress to a map.
-func mockAddressAdapter(obj any) (map[string]any, error) {
-	var a *MockAddress
-	switch v := obj.(type) {
-	case MockAddress:
-		a = &v
-	case *MockAddress:
-		a = v
-	default:
-		return nil, fmt.Errorf("unsupported type for adapter: %T", obj)
-	}
-	return map[string]any{
-		"Street": a.Street,
-		"City":   a.City,
-	}, nil
-}
 
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -119,14 +60,8 @@ func TestValidator_Validate(t *testing.T) {
 
 	// Define the adapters for the types we want to validate.
 	adapters := map[string]TypeAdapter{
-		"MockUser":              mockUserAdapter,
-		"MockUserWithProfile":   mockUserWithProfileAdapter,
-		"MockProfile":           mockProfileAdapter,
-		"MockAddress":           mockAddressAdapter,
-		// Adapter for the unregistered type test case.
-		"struct { Name string }": func(obj any) (map[string]any, error) {
-			return map[string]any{}, nil
-		},
+		"sources.MockUser":     mockUserAdapter,
+		"sources.EmbeddedUser": embeddedUserAdapter,
 	}
 
 	// Create a new validator with the adapters.
@@ -134,6 +69,8 @@ func TestValidator_Validate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewValidator() failed: %v", err)
 	}
+
+	intPtr := func(i int) *int { return &i }
 
 	tests := []struct {
 		name         string
@@ -143,93 +80,73 @@ func TestValidator_Validate(t *testing.T) {
 	}{
 		{
 			name: "valid object",
-			obj: &MockUser{
+			obj: &sources.MockUser{
 				Name:  "Gopher",
 				Email: "gopher@golang.org",
-				Age:   10,
+				Age:   20,
+				ID:    intPtr(1),
 			},
 			wantErr: nil,
 		},
 		{
 			name: "object with invalid field",
-			obj: &MockUser{
+			obj: &sources.MockUser{
 				Name:  "Gopher",
 				Email: "invalid-email",
-				Age:   10,
+				Age:   20,
+				ID:    intPtr(1),
 			},
-			wantErr: errors.Join(NewValidationError("MockUser", "Email", `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')`)),
+			wantErr: errors.Join(NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`)),
 		},
 		{
 			name: "object with multiple errors",
-			obj: &MockUser{
-				Name:  "",
+			obj: &sources.MockUser{
+				Name:  "", // Fails nonzero
 				Email: "invalid-email",
-				Age:   10,
+				Age:   20,
+				ID:    intPtr(1),
 			},
 			wantErr:      errors.New("multiple errors expected"),
 			isMultiError: true,
 		},
 		{
 			name: "object with type rule violation",
-			obj: &MockUser{
+			obj: &sources.MockUser{
 				Name:  "Gopher",
 				Email: "gopher@golang.org",
-				Age:   99, // Fails the type-level rule "this.Age < 50"
+				Age:   17, // Fails the type-level rule "self.Age >= 18"
+				ID:    intPtr(1),
 			},
-			wantErr: errors.Join(NewValidationError("MockUser", "", "this.Age < 50")),
+			wantErr: errors.Join(NewValidationError("sources.MockUser", "", "self.Age >= 18")),
 		},
 		{
 			name:    "unregistered type",
 			obj:     struct{ Age int }{10},
-			wantErr: NewFatalError("no TypeAdapter registered for type struct { Age int }"),
+			wantErr: NewFatalError("no TypeAdapter registered for type struct { Age int } or struct { Age int }"),
 		},
 		{
-			name: "valid nested struct",
-			obj: &MockUserWithProfile{
-				Name:  "Gopher",
-				Email: "gopher@golang.org",
-				Age:   10,
-				Profile: &MockProfile{
-					Title: "Engineer",
-					Address: &MockAddress{
-						Street: "123 Go Street",
-						City:   "Gopherville",
-					},
-				},
+			name: "valid embedded struct",
+			obj: &sources.EmbeddedUser{
+				Base: sources.Base{ID: "ab"},
+				Name: "Gopher",
 			},
 			wantErr: nil,
 		},
 		{
-			name: "invalid nested struct field",
-			obj: &MockUserWithProfile{
-				Name:  "Gopher",
-				Email: "gopher@golang.org",
-				Age:   10,
-				Profile: &MockProfile{
-					Title: "", // Fails validation rule
-					Address: &MockAddress{
-						Street: "123 Go Street",
-						City:   "Gopherville",
-					},
-				},
+			name: "invalid embedded struct field",
+			obj: &sources.EmbeddedUser{
+				Base: sources.Base{ID: "a"}, // Fails size check
+				Name: "Gopher",
 			},
-			wantErr: NewValidationError("MockProfile", "Title", "this.Title.size() > 0"),
+			wantErr: NewValidationError("sources.EmbeddedUser", "ID", `self != "" && self.size() > 1`),
 		},
 		{
-			name: "invalid deep nested struct field",
-			obj: &MockUserWithProfile{
-				Name:  "Gopher",
-				Email: "gopher@golang.org",
-				Age:   10,
-				Profile: &MockProfile{
-					Title: "Engineer",
-					Address: &MockAddress{
-						Street: "", // Fails validation rule
-						City:   "Gopherville",
-					},
-				},
+			name: "invalid own struct field with embedded",
+			obj: &sources.EmbeddedUser{
+				Base: sources.Base{ID: "ab"},
+				Name: "", // Fails required check
 			},
-			wantErr: NewValidationError("MockAddress", "Street", "this.Street.size() > 0"),
+			wantErr: NewValidationError("sources.EmbeddedUser", "Name", `self != ""`),
 		},
 	}
 
@@ -242,8 +159,8 @@ func TestValidator_Validate(t *testing.T) {
 					t.Fatalf("Validate() expected errors, got nil")
 				}
 				errStr := gotErr.Error()
-				nameRuleError := NewValidationError("MockUser", "Name", "this.Name.size() > 0").Error()
-				emailRuleError := NewValidationError("MockUser", "Email", `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')`).Error()
+				nameRuleError := NewValidationError("sources.MockUser", "Name", `self != ""`).Error()
+				emailRuleError := NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`).Error()
 
 				if !strings.Contains(errStr, nameRuleError) {
 					t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRuleError, errStr)

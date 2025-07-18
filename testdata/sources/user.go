@@ -48,3 +48,12 @@ type MockMoreComplexData struct {
 	// and that each string within the nested slice is not empty.
 	MapOfSlices map[string][]string `validate:"keys,nonzero,values,dive,nonzero"`
 }
+
+type Base struct {
+	ID string `validate:"required,cel:self.size() > 1"`
+}
+
+type EmbeddedUser struct {
+	Base
+	Name string `validate:"required"`
+}

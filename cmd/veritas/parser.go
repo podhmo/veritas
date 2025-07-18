@@ -14,13 +14,18 @@ import (
 )
 
 var shorthandCELMap = map[string]any{
-	"required": "self != nil",
+	"required": map[string]string{
+		"string": `self != ""`,
+		"ptr":    "self != null",
+		"slice":  "self.size() > 0",
+		"map":    "self.size() > 0",
+	},
 	"nonzero": map[string]string{
 		"string": `self != ""`,
 		"int":    "self != 0",
 		"uint":   "self != 0",
 		"float":  "self != 0.0",
-		"ptr":    "self != nil",
+		"ptr":    "self != null",
 		"slice":  "self.size() > 0",
 		"map":    "self.size() > 0",
 		"bool":   "self",
@@ -81,33 +86,7 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 						}
 					}
 
-					for _, field := range structType.Fields.List {
-						if field.Tag == nil || len(field.Names) == 0 {
-							continue
-						}
-						fieldName := field.Names[0].Name
-						tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
-						validateTag, ok := tag.Lookup("validate")
-						if !ok {
-							continue
-						}
-
-						tv := pkg.TypesInfo.TypeOf(field.Type)
-						if tv == nil {
-							p.logger.Warn("could not determine type for field", "field", fieldName)
-							continue
-						}
-
-						rawRules := strings.Split(validateTag, ",")
-						celRules, err := p.processRules(rawRules, tv)
-						if err != nil {
-							p.logger.Warn("error processing rules", "field", fieldName, "error", err)
-							continue
-						}
-						if len(celRules) > 0 {
-							ruleSet.FieldRules[fieldName] = celRules
-						}
-					}
+					p.extractRulesForStruct(pkg, structType, &ruleSet)
 
 					if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
 						fullTypeName := fmt.Sprintf("%s.%s", pkg.Name, structName)
@@ -121,6 +100,87 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 
 	return ruleSets, nil
 }
+
+func (p *Parser) extractRulesForStruct(pkg *packages.Package, structType *ast.StructType, ruleSet *veritas.ValidationRuleSet) {
+	for _, field := range structType.Fields.List {
+		// Embedded field
+		if field.Names == nil {
+			if embeddedStruct, ok := p.getEmbeddedStruct(pkg, field.Type); ok {
+				p.extractRulesForStruct(pkg, embeddedStruct, ruleSet)
+			}
+			continue
+		}
+
+		fieldName := field.Names[0].Name
+		if field.Tag == nil {
+			continue
+		}
+		tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
+		validateTag, ok := tag.Lookup("validate")
+		if !ok {
+			continue
+		}
+
+		tv := pkg.TypesInfo.TypeOf(field.Type)
+		if tv == nil {
+			p.logger.Warn("could not determine type for field", "field", fieldName)
+			continue
+		}
+
+		rawRules := strings.Split(validateTag, ",")
+		celRules, err := p.processRules(rawRules, tv)
+		if err != nil {
+			p.logger.Warn("error processing rules", "field", fieldName, "error", err)
+			continue
+		}
+		if len(celRules) > 0 {
+			ruleSet.FieldRules[fieldName] = celRules
+		}
+	}
+}
+
+func (p *Parser) getEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (*ast.StructType, bool) {
+	typeOf := pkg.TypesInfo.TypeOf(expr)
+	if typeOf == nil {
+		return nil, false
+	}
+
+	named, ok := typeOf.(*types.Named)
+	if !ok {
+		return nil, false
+	}
+
+	obj := named.Obj()
+	if obj == nil || obj.Pkg() != pkg.Types {
+		// Not defined in the same package, handling this would require finding the package and file.
+		// For now, we only support embedded structs from the same package.
+		return nil, false
+	}
+
+	// Find the AST node for the type definition
+	for _, f := range pkg.Syntax {
+		for _, decl := range f.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				if typeSpec.Name.Name == obj.Name() {
+					if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+						return structType, true
+					}
+				}
+			}
+		}
+	}
+
+	return nil, false
+}
+
 
 func (p *Parser) processRules(rawRules []string, tv types.Type) ([]string, error) {
 	var rules []*Rule
@@ -289,7 +349,16 @@ func (p *Parser) shorthandToCEL(shorthand string, tv types.Type, varName string)
 }
 
 func (p *Parser) categorizeType(tv types.Type) string {
-	switch t := tv.Underlying().(type) {
+	// Keep resolving named types until we get to the underlying type.
+	for {
+		named, ok := tv.(*types.Named)
+		if !ok {
+			break
+		}
+		tv = named.Underlying()
+	}
+
+	switch t := tv.(type) {
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsString != 0:
