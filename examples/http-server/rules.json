@@ -1,0 +1,18 @@
+{
+  "main.User": {
+    "fieldRules": {
+      "Name": [
+        {
+          "rule": "size(this) > 0",
+          "message": "name is required"
+        }
+      ],
+      "Email": [
+        {
+          "rule": "this.contains('@')",
+          "message": "email must contain @"
+        }
+      ]
+    }
+  }
+}
