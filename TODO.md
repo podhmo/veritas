@@ -31,12 +31,12 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Develop the `veritas` CLI tool to automatically extract validation rules from Go source code.
 
--   **[ ] 2.1: Go Source Code Parser**
-    -   [ ] 2.1.1: Implement a parser using `go/ast` to recursively scan directories and find `struct` definitions.
+-   **[x] 2.1: Go Source Code Parser**
+    -   [x] 2.1.1: Implement a parser using `go/ast` to recursively scan directories and find `struct` definitions.
 
--   **[ ] 2.2: Rule Extraction Logic**
-    -   [ ] 2.2.1: Extract field-level rules from `validate:"..."` struct tags.
-    -   [ ] 2.2.2: Extract type-level rules from special `// @cel: ...` comments preceding a `struct` definition.
+-   **[x] 2.2: Rule Extraction Logic**
+    -   [x] 2.2.1: Extract field-level rules from `validate:"..."` struct tags.
+    -   [x] 2.2.2: Extract type-level rules from special `// @cel: ...` comments preceding a `struct` definition.
     -   [ ] 2.2.3: Implement a mapping from common shorthands (`required`, `email`, etc.) to their corresponding CEL expressions.
 
 -   **[ ] 2.3: `veritas` CLI Implementation**
