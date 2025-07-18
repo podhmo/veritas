@@ -15,7 +15,20 @@ import (
 
 func TestUserAPI(t *testing.T) {
 	// setup validator
-	v, err := veritas.NewValidatorFromJSONFile("./rules.json")
+	v, err := veritas.NewValidatorFromJSONFile("./rules.json", veritas.WithTypeAdapters(
+		map[string]veritas.TypeAdapter{
+			"http-server.User": func(ob any) (map[string]any, error) {
+				v, ok := ob.(User)
+				if !ok {
+					return nil, nil // a
+				}
+				return map[string]any{
+					"Name":  v.Name,
+					"Email": v.Email,
+				}, nil
+			},
+		},
+	))
 	if err != nil {
 		t.Fatalf("failed to create validator: %v", err)
 	}
@@ -29,7 +42,7 @@ func TestUserAPI(t *testing.T) {
 			return
 		}
 
-		if err := v.Validate(user); err != nil {
+		if err := v.Validate(r.Context(), user); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			response := map[string]any{
@@ -66,19 +79,19 @@ func TestUserAPI(t *testing.T) {
 			name:           "validation error - name required",
 			body:           `{"name": "", "email": "test@example.com"}`,
 			wantStatusCode: http.StatusBadRequest,
-			wantBody:       `"details":{"Name":"name is required"}`,
+			wantBody:       `"details":{"Name":"size(self) > 0"}`,
 		},
 		{
 			name:           "validation error - email invalid",
 			body:           `{"name": "test", "email": "invalid-email"}`,
 			wantStatusCode: http.StatusBadRequest,
-			wantBody:       `"details":{"Email":"email must contain @"}`,
+			wantBody:       `"details":{"Email":"self.contains('@')"}`,
 		},
 		{
 			name:           "validation error - both invalid",
 			body:           `{"name": "", "email": "invalid-email"}`,
 			wantStatusCode: http.StatusBadRequest,
-			wantBody:       `"details":{"Email":"email must contain @","Name":"name is required"}`,
+			wantBody:       `"details":{"Email":"self.contains('@')","Name":"size(self) > 0"}`,
 		},
 	}
 
@@ -101,11 +114,40 @@ func TestUserAPI(t *testing.T) {
 				t.Errorf("unexpected status code: got %v, want %v", resp.StatusCode, tt.wantStatusCode)
 			}
 
-			var body bytes.Buffer
-			body.ReadFrom(resp.Body)
+			var body map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("failed to decode response body: %v", err)
+			}
 
-			if !strings.Contains(body.String(), tt.wantBody) {
-				t.Errorf("unexpected body: got %v, want %v", body.String(), tt.wantBody)
+			if tt.wantStatusCode == http.StatusBadRequest {
+				details, ok := body["details"].(map[string]any)
+				if !ok {
+					t.Fatalf("details is not a map[string]any")
+				}
+				if tt.name == "validation error - both invalid" {
+					if details["Name"] != "size(self) > 0" {
+						t.Errorf("unexpected error for Name: got %v, want %v", details["Name"], "size(self) > 0")
+					}
+					if details["Email"] != "self.contains('@')" {
+						t.Errorf("unexpected error for Email: got %v, want %v", details["Email"], "self.contains('@')")
+					}
+				} else if tt.name == "validation error - name required" {
+					if details["Name"] != "size(self) > 0" {
+						t.Errorf("unexpected error for Name: got %v, want %v", details["Name"], "size(self) > 0")
+					}
+				} else if tt.name == "validation error - email invalid" {
+					if details["Email"] != "self.contains('@')" {
+						t.Errorf("unexpected error for Email: got %v, want %v", details["Email"], "self.contains('@')")
+					}
+				}
+			} else {
+				var wantBody map[string]any
+				if err := json.Unmarshal([]byte(tt.wantBody), &wantBody); err != nil {
+					t.Fatalf("failed to unmarshal wantBody: %v", err)
+				}
+				if body["name"] != wantBody["name"] || body["email"] != wantBody["email"] {
+					t.Errorf("unexpected body: got %v, want %v", body, wantBody)
+				}
 			}
 		})
 	}

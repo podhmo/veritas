@@ -1,17 +1,11 @@
 {
-  "main.User": {
+  "http-server.User": {
     "fieldRules": {
       "Name": [
-        {
-          "rule": "size(this) > 0",
-          "message": "name is required"
-        }
+        "size(self) > 0"
       ],
       "Email": [
-        {
-          "rule": "this.contains('@')",
-          "message": "email must contain @"
-        }
+        "self.contains('@')"
       ]
     }
   }
