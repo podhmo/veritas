@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,6 +30,49 @@ func mockUserAdapter(obj any) (map[string]any, error) {
 		"Age":   user.Age,
 		"ID":    user.ID,
 		"URL":   user.URL,
+	}, nil
+}
+
+func boxAdapter(obj any) (map[string]any, error) {
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	if val.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("boxAdapter supports only structs, got %T", obj)
+	}
+
+	field := val.FieldByName("Value")
+	if !field.IsValid() {
+		return nil, fmt.Errorf("no 'Value' field in %T", obj)
+	}
+
+	fieldVal := field.Interface()
+
+	// Dereference pointers for CEL, but keep nil as is.
+	rv := reflect.ValueOf(fieldVal)
+	if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+		fieldVal = rv.Elem().Interface()
+	}
+
+	return map[string]any{
+		"Value": fieldVal,
+	}, nil
+}
+
+func itemAdapter(obj any) (map[string]any, error) {
+	var item *sources.Item
+	switch v := obj.(type) {
+	case sources.Item:
+		item = &v
+	case *sources.Item:
+		item = v
+	default:
+		return nil, fmt.Errorf("unsupported type for Item adapter: %T", obj)
+	}
+	return map[string]any{
+		"Name": item.Name,
 	}, nil
 }
 
@@ -116,7 +160,7 @@ func userWithProfilesAdapter(obj any) (map[string]any, error) {
 
 
 func TestValidator_Validate(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	engine, err := NewEngine(logger, DefaultFunctions()...)
 	if err != nil {
 		t.Fatalf("NewEngine() failed: %v", err)
@@ -131,6 +175,8 @@ func TestValidator_Validate(t *testing.T) {
 		"sources.ComplexUser":      complexUserAdapter,
 		"sources.Profile":          profileAdapter,
 		"sources.UserWithProfiles": userWithProfilesAdapter,
+		"sources.Box[T]":           boxAdapter,
+		"sources.Item":             itemAdapter,
 	}
 
 	// Create a new validator with the adapters.
@@ -288,6 +334,35 @@ func TestValidator_Validate(t *testing.T) {
 				},
 			},
 			isMultiError: true, // Expecting two distinct validation errors
+		},
+		{
+			name: "valid generic struct with string",
+			obj: &sources.Box[string]{
+				Value: "hello",
+			},
+			wantErr: nil,
+		},
+		{
+			name: "invalid generic struct with nil pointer",
+			obj: &sources.Box[*string]{
+				Value: nil,
+			},
+			wantErr: NewValidationError("sources.Box[T]", "Value", `self != null`),
+		},
+		{
+			name: "valid generic struct with struct pointer",
+			obj: &sources.Box[*sources.Item]{
+				Value: &sources.Item{Name: "valid-item"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "invalid generic struct with invalid nested struct",
+			obj: &sources.Box[*sources.Item]{
+				Value: &sources.Item{Name: ""}, // name is required
+			},
+			wantErr:      NewValidationError("sources.Item", "Name", `self != ""`),
+			isMultiError: true,
 		},
 	}
 

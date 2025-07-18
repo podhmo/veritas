@@ -82,6 +82,17 @@ func TestParser(t *testing.T) {
 				"Name": {`self != ""`},
 			},
 		},
+		"sources.Box[T]": {
+			TypeRules: []string{"self.Value != nil"},
+			FieldRules: map[string][]string{
+				"Value": {`self != null`},
+			},
+		},
+		"sources.Item": {
+			FieldRules: map[string][]string{
+				"Name": {`self != ""`},
+			},
+		},
 		}
 
 		// Parse the directory containing the test file.
