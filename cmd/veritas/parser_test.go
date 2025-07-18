@@ -15,36 +15,37 @@ func TestParser(t *testing.T) {
 		p := NewParser(logger)
 
 		// The key is now the fully qualified type name
+		const pkgPrefix = "github.com/podhmo/veritas/testdata/sources."
 		want := map[string]veritas.ValidationRuleSet{
-			"sources.Base": {
+			pkgPrefix + "Base": {
 				FieldRules: map[string][]string{
 					"ID": {`self != "" && self.size() > 1`},
 				},
 			},
-			"sources.Box[T]": {
+			pkgPrefix + "Box[T]": {
 				TypeRules: []string{"self.Value != null"},
 				FieldRules: map[string][]string{
 					"Value": {`self != null`},
 				},
 			},
-			"sources.ComplexUser": {
+			pkgPrefix + "ComplexUser": {
 				FieldRules: map[string][]string{
 					"Name":   {`self != ""`},
 					"Scores": {`self.all(x, x >= 0)`},
 				},
 			},
-			"sources.EmbeddedUser": {
+			pkgPrefix + "EmbeddedUser": {
 				FieldRules: map[string][]string{
 					"ID":   {`self != "" && self.size() > 1`},
 					"Name": {`self != ""`},
 				},
 			},
-			"sources.Item": {
+			pkgPrefix + "Item": {
 				FieldRules: map[string][]string{
 					"Name": {`self != ""`},
 				},
 			},
-			"sources.MockComplexData": {
+			pkgPrefix + "MockComplexData": {
 				FieldRules: map[string][]string{
 					"UserEmails": {`self.all(x, x.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$'))`},
 					"ResourceMap": {
@@ -55,7 +56,7 @@ func TestParser(t *testing.T) {
 					"Matrix": {`self.all(x, x.all(x, x != 0))`},
 				},
 			},
-			"sources.MockMoreComplexData": {
+			pkgPrefix + "MockMoreComplexData": {
 				FieldRules: map[string][]string{
 					"ListOfMaps": {
 						`self.all(x, x.size() > 0 && x.all(k, k.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')) && x.all(v, v != ""))`,
@@ -66,7 +67,7 @@ func TestParser(t *testing.T) {
 					},
 				},
 			},
-			"sources.MockUser": {
+			pkgPrefix + "MockUser": {
 				TypeRules: []string{"self.Age >= 18"},
 				FieldRules: map[string][]string{
 					"Name":  {`self != ""`},
@@ -74,7 +75,7 @@ func TestParser(t *testing.T) {
 					"ID":    {`self != null`},
 				},
 			},
-			"sources.MockVariety": {
+			pkgPrefix + "MockVariety": {
 				FieldRules: map[string][]string{
 					"Count":    {"self != 0"},
 					"IsActive": {"self"},
@@ -82,13 +83,13 @@ func TestParser(t *testing.T) {
 					"Metadata": {"self.size() > 0"},
 				},
 			},
-			"sources.Profile": {
+			pkgPrefix + "Profile": {
 				FieldRules: map[string][]string{
 					"Platform": {`self != ""`},
 					"Handle":   {`self != "" && self.size() > 2`},
 				},
 			},
-			"sources.UserWithProfiles": {
+			pkgPrefix + "UserWithProfiles": {
 				FieldRules: map[string][]string{
 					"Name": {`self != ""`},
 				},

@@ -110,7 +110,9 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 					p.extractRulesForStruct(pkg, structType, &ruleSet)
 
 					if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
-						fullTypeName := fmt.Sprintf("%s.%s", pkg.Name, structName)
+						// Use PkgPath instead of Name to get a unique identifier for the package,
+						// especially crucial for the `main` package.
+						fullTypeName := fmt.Sprintf("%s.%s", pkg.PkgPath, structName)
 						ruleSets[fullTypeName] = ruleSet
 					}
 				}
@@ -201,7 +203,6 @@ func (p *Parser) getEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (*ast.S
 
 	return nil, false
 }
-
 
 func (p *Parser) processRules(rawRules []string, tv types.Type) ([]string, error) {
 	var celRules []string
