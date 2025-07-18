@@ -1,16 +1,11 @@
 package veritas
 
 import (
-	"context"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestValidator(t *testing.T) {
 	// Setup: Create a mock engine and rule provider for testing.
-	ctx := context.Background()
 
 	t.Run("valid object", func(t *testing.T) {
 		// Define a struct and a valid instance of it.

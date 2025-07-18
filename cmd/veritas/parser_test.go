@@ -2,8 +2,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestParser(t *testing.T) {
@@ -16,7 +14,9 @@ func TestParser(t *testing.T) {
 		// want := veritas.ValidationRuleSet{ ... }
 		// got, err := parser.Parse(...)
 		// if diff := cmp.Diff(want, got); diff != "" { ... }
-	}
+
+		t.Log("TestParser placeholder")
+	})
 
 	// TODO: Add more test cases for:
 	// - Multiple structs in one file.

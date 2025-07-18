@@ -10,4 +10,6 @@ func TestEngine(t *testing.T) {
 	//   - Test case 1: Cache miss, successful compilation.
 	//   - Test case 2: Cache hit, program is retrieved without compilation.
 	//   - Test case 3: Invalid CEL expression, compilation fails.
-}````
+	// dummy assertion to avoid empty function error
+	t.Log("TestEngine placeholder")
+}
