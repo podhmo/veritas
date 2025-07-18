@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/google/cel-go/cel"
 	"github.com/podhmo/veritas"
@@ -19,52 +18,42 @@ var Analyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
-var (
-	ruleSets map[string]veritas.ValidationRuleSet
-	once     sync.Once
-	loadErr  error
-)
-
 func loadRules(pass *analysis.Pass) (map[string]veritas.ValidationRuleSet, error) {
-	once.Do(func() {
-		if len(pass.Files) == 0 {
-			ruleSets = make(map[string]veritas.ValidationRuleSet)
-			return
-		}
+	if len(pass.Files) == 0 {
+		return make(map[string]veritas.ValidationRuleSet), nil
+	}
 
-		// find rules.json from the directory of the first file
-		dir := filepath.Dir(pass.Fset.File(pass.Files[0].Pos()).Name())
+	// find rules.json from the directory of the first file
+	dir := filepath.Dir(pass.Fset.File(pass.Files[0].Pos()).Name())
 
-		var rulesPath string
-		for {
-			path := filepath.Join(dir, "rules.json")
-			if _, err := os.Stat(path); err == nil {
-				rulesPath = path
-				break
-			}
-			if dir == filepath.Dir(dir) {
-				// root directory
-				break
-			}
-			dir = filepath.Dir(dir)
+	var rulesPath string
+	for {
+		path := filepath.Join(dir, "rules.json")
+		if _, err := os.Stat(path); err == nil {
+			rulesPath = path
+			break
 		}
+		if dir == filepath.Dir(dir) {
+			// root directory
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
 
-		if rulesPath == "" {
-			ruleSets = make(map[string]veritas.ValidationRuleSet)
-			return
-		}
+	if rulesPath == "" {
+		return make(map[string]veritas.ValidationRuleSet), nil
+	}
 
-		b, err := os.ReadFile(rulesPath)
-		if err != nil {
-			loadErr = fmt.Errorf("failed to read rules file: %w", err)
-			return
-		}
-		if err := json.Unmarshal(b, &ruleSets); err != nil {
-			loadErr = fmt.Errorf("failed to unmarshal rules: %w", err)
-			return
-		}
-	})
-	return ruleSets, loadErr
+	b, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read rules file: %w", err)
+	}
+
+	var ruleSets map[string]veritas.ValidationRuleSet
+	if err := json.Unmarshal(b, &ruleSets); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rules: %w", err)
+	}
+	return ruleSets, nil
 }
 
 func run(pass *analysis.Pass) (interface{}, error) {
@@ -85,21 +74,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		return nil, fmt.Errorf("failed to extend cel env: %w", err)
 	}
 
-	for typeName, ruleSet := range rules {
-		for _, rule := range ruleSet.TypeRules {
-			if _, issues := env.Compile(rule); issues != nil && issues.Err() != nil {
-				pass.Reportf(pass.Files[0].Pos(), "invalid type rule for %s: %s", typeName, issues.Err())
-			}
-		}
-		for fieldName, fieldRules := range ruleSet.FieldRules {
-			for _, rule := range fieldRules {
-				if _, issues := env.Compile(rule); issues != nil && issues.Err() != nil {
-					pass.Reportf(pass.Files[0].Pos(), "invalid field rule for %s.%s: %s", typeName, fieldName, issues.Err())
-				}
-			}
-		}
-	}
-
 	for _, file := range pass.Files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			ts, ok := n.(*ast.TypeSpec)
@@ -117,6 +91,23 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				return true
 			}
 
+			// Check TypeRules
+			for _, rule := range ruleSet.TypeRules {
+				if _, issues := env.Compile(rule); issues != nil && issues.Err() != nil {
+					pass.Reportf(ts.Pos(), "invalid type rule for %s: %s", typeName, issues.Err())
+				}
+			}
+
+			// Check FieldRules (CEL syntax)
+			for fieldName, fieldRules := range ruleSet.FieldRules {
+				for _, rule := range fieldRules {
+					if _, issues := env.Compile(rule); issues != nil && issues.Err() != nil {
+						pass.Reportf(ts.Pos(), "invalid field rule for %s.%s: %s", typeName, fieldName, issues.Err())
+					}
+				}
+			}
+
+			// Check FieldRules (field existence)
 			definedFields := make(map[string]bool)
 			for _, field := range structType.Fields.List {
 				for _, name := range field.Names {

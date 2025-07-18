@@ -51,19 +51,19 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Develop the `veritas-lint` tool to statically check for issues in veritas rule definitions.
 
--   **[ ] 2.5.1: Initial Linter Setup**
+-   **[x] 2.5.1: Initial Linter Setup**
     -   [x] 2.5.1.1: Create the `cmd/veritas-lint` directory and `main.go`.
     -   [x] 2.5.1.2: Use `golang.org/x/tools/go/analysis/singlechecker` to create the linter's entry point.
     -   [x] 2.5.1.3: Create the `lint` package with a basic `analysis.Analyzer` definition.
--   **[ ] 2.5.2: Rule Loading and Parsing**
-    -   [ ] 2.5.2.1: Implement logic for the linter to find and parse `rules.json` files within the target project.
-    -   [ ] 2.5.2.2: The linter should be able to parse the JSON into `ValidationRuleSet` structs.
--   **[ ] 2.5.3: Basic Checks**
-    -   [ ] 2.5.3.1: Implement a check to ensure that CEL expressions in rules are syntactically valid.
-    -   [ ] 2.5.3.2: Implement a check to verify that field names in `FieldRules` actually exist in the corresponding struct.
--   **[ ] 2.5.4: Linter Testing**
-    -   [ ] 2.5.4.1: Create test cases with valid and invalid `rules.json` files.
-    -   [ ] 2.5.4.2: Use `analysistest` to write tests for the linter.
+-   **[x] 2.5.2: Rule Loading and Parsing**
+    -   [x] 2.5.2.1: Implement logic for the linter to find and parse `rules.json` files within the target project.
+    -   [x] 2.5.2.2: The linter should be able to parse the JSON into `ValidationRuleSet` structs.
+-   **[x] 2.5.3: Basic Checks**
+    -   [x] 2.5.3.1: Implement a check to ensure that CEL expressions in rules are syntactically valid.
+    -   [x] 2.5.3.2: Implement a check to verify that field names in `FieldRules` actually exist in the corresponding struct.
+-   **[x] 2.5.4: Linter Testing**
+    -   [x] 2.5.4.1: Create test cases with valid and invalid `rules.json` files.
+    -   [x] 2.5.4.2: Use `analysistest` to write tests for the linter.
 
 ## Phase 3: Advanced Data Structures Support (v0.3)
 
