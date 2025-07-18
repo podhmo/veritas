@@ -14,9 +14,26 @@ type MockUser struct {
 
 // MockVariety is a struct with various field types for testing.
 type MockVariety struct {
-	Count    int      `validate:"nonzero"`
-	IsActive bool     `validate:"nonzero"`
-	Scores   []int    `validate:"nonzero"`
+	Count    int               `validate:"nonzero"`
+	IsActive bool              `validate:"nonzero"`
+	Scores   []int             `validate:"nonzero"`
 	Metadata map[string]string `validate:"nonzero"`
 	Optional *string
+}
+
+// MockComplexData is a struct for testing advanced validation scenarios
+// like slices and maps.
+type MockComplexData struct {
+	// Validate each string in the slice is a valid email.
+	UserEmails []string `validate:"dive,email"`
+
+	// Validate each key in the map starts with "id_" and each value is not nil.
+	ResourceMap map[string]*int `validate:"keys,cel:self.startsWith('id_'),values,required"`
+
+	// Validate a slice of pointers to MockUser, ensuring each pointer is not nil
+	// and then diving into the struct's own validation.
+	Users []*MockUser `validate:"dive,required"`
+
+	// Nested dive: slice of slices of ints. Each int must not be zero.
+	Matrix [][]int `validate:"dive,dive,nonzero"`
 }

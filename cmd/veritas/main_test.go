@@ -49,12 +49,10 @@ func TestRun(t *testing.T) {
 	// Define the expected output.
 	want := map[string]veritas.ValidationRuleSet{
 		"sources.MockUser": {
-			TypeRules: []string{
-				"self.Age >= 18",
-			},
+			TypeRules: []string{"self.Age >= 18"},
 			FieldRules: map[string][]string{
 				"Name":  {`self != ""`},
-				"Email": {`self != ""`, `self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
+				"Email": {`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
 				"ID":    {`self != nil`},
 			},
 		},
@@ -64,6 +62,17 @@ func TestRun(t *testing.T) {
 				"IsActive": {"self"},
 				"Scores":   {"self.size() > 0"},
 				"Metadata": {"self.size() > 0"},
+			},
+		},
+		"sources.MockComplexData": {
+			FieldRules: map[string][]string{
+				"UserEmails": {`self.all(x, x.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$'))`},
+				"ResourceMap": {
+					`self.all(k, k.startsWith('id_'))`,
+					`self.all(v, v != nil)`,
+				},
+				"Users":  {`self.all(x, x != nil)`},
+				"Matrix": {`self.all(x, x.all(x, x != 0))`},
 			},
 		},
 	}
