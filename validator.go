@@ -231,16 +231,42 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 		}
 	}
 	// --- Recursive Validation Step ---
-	// Iterate over the fields of the struct to find nested structs to validate.
+	// Iterate over the fields of the struct to find nested structs, slices, and maps.
 	for i := 0; i < val.NumField(); i++ {
 		fieldVal := val.Field(i)
 
-		// We need to check if the field is a struct or a pointer to a struct.
-		kind := fieldVal.Kind()
-		if kind == reflect.Struct || (kind == reflect.Ptr && fieldVal.Type().Elem().Kind() == reflect.Struct) {
-			// Ensure we can get an interface to the field to pass to the recursive call.
-			if fieldVal.CanInterface() {
+		// Ensure we can get an interface to the field to pass to the recursive call.
+		if !fieldVal.CanInterface() {
+			continue
+		}
+
+		switch fieldVal.Kind() {
+		case reflect.Struct:
+			v.validateRecursive(fieldVal.Interface(), allErrors)
+
+		case reflect.Ptr:
+			// Only recurse on pointers to structs.
+			if fieldVal.Type().Elem().Kind() == reflect.Struct {
 				v.validateRecursive(fieldVal.Interface(), allErrors)
+			}
+
+		case reflect.Slice:
+			// Iterate over slice elements and validate them if they are structs.
+			for j := 0; j < fieldVal.Len(); j++ {
+				elem := fieldVal.Index(j)
+				if elem.CanInterface() {
+					v.validateRecursive(elem.Interface(), allErrors)
+				}
+			}
+
+		case reflect.Map:
+			// Iterate over map values and validate them if they are structs.
+			iter := fieldVal.MapRange()
+			for iter.Next() {
+				elem := iter.Value()
+				if elem.CanInterface() {
+					v.validateRecursive(elem.Interface(), allErrors)
+				}
 			}
 		}
 	}

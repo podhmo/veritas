@@ -89,9 +89,25 @@
       ],
       "Scores": [
         "self.all(x, x >= 0)"
+      ]
+    }
+  },
+  "sources.Profile": {
+    "typeRules": null,
+    "fieldRules": {
+      "Platform": [
+        "self != \"\""
       ],
-      "Metadata": [
-        "self.keys().all(k, k != \"\") && self.values().all(v, v.size() >= 1)"
+      "Handle": [
+        "self != \"\" && self.size() > 2"
+      ]
+    }
+  },
+  "sources.UserWithProfiles": {
+    "typeRules": null,
+    "fieldRules": {
+      "Name": [
+        "self != \"\""
       ]
     }
   }
