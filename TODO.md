@@ -16,6 +16,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [~] 1.2.2: Implement the primary `Validate(obj any) error` method. Use `log/slog.Error` for internal errors like reflection failures. (Note: Implementation is in progress, facing issues with dynamic type registration in cel-go).
     -   [x] 1.2.3: Implement logic to apply `TypeRules` and `FieldRules` separately, aggregating all validation failures using `errors.Join`.
     -   [x] 1.2.4: Ensure error messages are contextual, including the type and field name (e.g., `User.Email: validation failed...`).
+    -   [ ] 1.2.5: **[TODO]** Resolve the `unsupported type` error in `cel-go`. Investigate the correct way to register native Go structs with the CEL environment to allow validation of struct fields. This is currently blocking all validation tests.
 
 -   **[x] 1.3: Rule Provider Implementation**
     -   [x] 1.3.1: Define the `ValidationRuleSet` struct (containing `TypeRules`, `FieldRules`).
