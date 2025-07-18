@@ -2,13 +2,11 @@ package veritas
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 // MockUser is a test struct.
@@ -16,6 +14,25 @@ type MockUser struct {
 	Name  string
 	Email string
 	Age   int
+}
+
+// mockUserAdapter converts a MockUser object (or a pointer to it) to a map.
+func mockUserAdapter(obj any) (map[string]any, error) {
+	var user *MockUser
+	switch v := obj.(type) {
+	case MockUser:
+		user = &v
+	case *MockUser:
+		user = v
+	default:
+		return nil, fmt.Errorf("unsupported type for MockUser adapter: %T", obj)
+	}
+
+	return map[string]any{
+		"Name":  user.Name,
+		"Email": user.Email,
+		"Age":   user.Age,
+	}, nil
 }
 
 func TestValidator_Validate(t *testing.T) {
@@ -27,8 +44,17 @@ func TestValidator_Validate(t *testing.T) {
 
 	provider := NewJSONRuleProvider("testdata/rules/user.json")
 
-	// Create a new validator, registering the MockUser type.
-	validator, err := NewValidator(engine, provider, logger, MockUser{})
+	// Define the adapters for the types we want to validate.
+	adapters := map[string]TypeAdapter{
+		"MockUser": mockUserAdapter,
+		// Adapter for the unregistered type test case.
+		"struct { Name string }": func(obj any) (map[string]any, error) {
+			return map[string]any{}, nil
+		},
+	}
+
+	// Create a new validator with the adapters.
+	validator, err := NewValidator(engine, provider, logger, adapters)
 	if err != nil {
 		t.Fatalf("NewValidator() failed: %v", err)
 	}
@@ -55,7 +81,7 @@ func TestValidator_Validate(t *testing.T) {
 				Email: "invalid-email",
 				Age:   10,
 			},
-			wantErr: NewValidationError("MockUser", "Email", `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')`),
+			wantErr: errors.Join(NewValidationError("MockUser", "Email", `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')`)),
 		},
 		{
 			name: "object with multiple errors",
@@ -64,8 +90,6 @@ func TestValidator_Validate(t *testing.T) {
 				Email: "invalid-email",
 				Age:   10,
 			},
-			// We can't compare joined errors directly due to unpredictable order.
-			// So we check for the presence of each error message.
 			wantErr:      errors.New("multiple errors expected"),
 			isMultiError: true,
 		},
@@ -76,7 +100,12 @@ func TestValidator_Validate(t *testing.T) {
 				Email: "gopher@golang.org",
 				Age:   99, // Fails the type-level rule "this.Age < 50"
 			},
-			wantErr: NewValidationError("MockUser", "", "this.Age < 50"),
+			wantErr: errors.Join(NewValidationError("MockUser", "", "this.Age < 50")),
+		},
+		{
+			name:    "unregistered type",
+			obj:     struct{ Age int }{10},
+			wantErr: NewFatalError("no TypeAdapter registered for type struct { Age int }"),
 		},
 	}
 
@@ -89,19 +118,33 @@ func TestValidator_Validate(t *testing.T) {
 					t.Fatalf("Validate() expected errors, got nil")
 				}
 				errStr := gotErr.Error()
-				// Check that both expected error messages are present.
-				nameRule := "this.Name.size() > 0"
-				emailRule := `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')`
-				if !strings.Contains(errStr, nameRule) {
-					t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRule, errStr)
+				nameRuleError := NewValidationError("MockUser", "Name", "this.Name.size() > 0").Error()
+				emailRuleError := NewValidationError("MockUser", "Email", `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')`).Error()
+
+				if !strings.Contains(errStr, nameRuleError) {
+					t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRuleError, errStr)
 				}
-				if !strings.Contains(errStr, emailRule) {
-					t.Errorf("Validate() error missing expected content '%s' in '%s'", emailRule, errStr)
+				if !strings.Contains(errStr, emailRuleError) {
+					t.Errorf("Validate() error missing expected content '%s' in '%s'", emailRuleError, errStr)
 				}
-			} else {
-				if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-					t.Errorf("Validate() error mismatch (-want +got):\n%s", diff)
+				return
+			}
+
+			// Handle nil and non-nil error cases separately.
+			if tt.wantErr == nil {
+				if gotErr != nil {
+					t.Errorf("Validate() got error = %v, want nil", gotErr)
 				}
+				return
+			}
+
+			if gotErr == nil {
+				t.Errorf("Validate() got nil, want error = %v", tt.wantErr)
+				return
+			}
+
+			if tt.wantErr.Error() != gotErr.Error() {
+				t.Errorf("Validate() error mismatch\nwant: %s\ngot:  %s", tt.wantErr.Error(), gotErr.Error())
 			}
 		})
 	}
