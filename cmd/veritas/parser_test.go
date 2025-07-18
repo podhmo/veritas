@@ -21,26 +21,27 @@ func TestParser(t *testing.T) {
 					"ID": {`self != "" && self.size() > 1`},
 				},
 			},
+			"sources.Box[T]": {
+				TypeRules: []string{"self.Value != null"},
+				FieldRules: map[string][]string{
+					"Value": {`self != null`},
+				},
+			},
+			"sources.ComplexUser": {
+				FieldRules: map[string][]string{
+					"Name":   {`self != ""`},
+					"Scores": {`self.all(x, x >= 0)`},
+				},
+			},
 			"sources.EmbeddedUser": {
 				FieldRules: map[string][]string{
 					"ID":   {`self != "" && self.size() > 1`},
 					"Name": {`self != ""`},
 				},
 			},
-			"sources.MockUser": {
-				TypeRules: []string{"self.Age >= 18"},
+			"sources.Item": {
 				FieldRules: map[string][]string{
-					"Name":  {`self != ""`},
-					"Email": {`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
-					"ID":    {`self != null`},
-				},
-			},
-			"sources.MockVariety": {
-				FieldRules: map[string][]string{
-					"Count":    {"self != 0"},
-					"IsActive": {"self"},
-					"Scores":   {"self.size() > 0"},
-					"Metadata": {"self.size() > 0"},
+					"Name": {`self != ""`},
 				},
 			},
 			"sources.MockComplexData": {
@@ -65,23 +66,33 @@ func TestParser(t *testing.T) {
 					},
 				},
 			},
-		"sources.ComplexUser": {
-			FieldRules: map[string][]string{
-				"Name":   {`self != ""`},
-				"Scores": {`self.all(x, x >= 0)`},
+			"sources.MockUser": {
+				TypeRules: []string{"self.Age >= 18"},
+				FieldRules: map[string][]string{
+					"Name":  {`self != ""`},
+					"Email": {`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
+					"ID":    {`self != null`},
+				},
 			},
-		},
-		"sources.Profile": {
-			FieldRules: map[string][]string{
-				"Platform": {`self != ""`},
-				"Handle":   {`self != "" && self.size() > 2`},
+			"sources.MockVariety": {
+				FieldRules: map[string][]string{
+					"Count":    {"self != 0"},
+					"IsActive": {"self"},
+					"Scores":   {"self.size() > 0"},
+					"Metadata": {"self.size() > 0"},
+				},
 			},
-		},
-		"sources.UserWithProfiles": {
-			FieldRules: map[string][]string{
-				"Name": {`self != ""`},
+			"sources.Profile": {
+				FieldRules: map[string][]string{
+					"Platform": {`self != ""`},
+					"Handle":   {`self != "" && self.size() > 2`},
+				},
 			},
-		},
+			"sources.UserWithProfiles": {
+				FieldRules: map[string][]string{
+					"Name": {`self != ""`},
+				},
+			},
 		}
 
 		// Parse the directory containing the test file.

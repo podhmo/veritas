@@ -33,6 +33,10 @@ func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, ad
 		return nil, fmt.Errorf("failed to get rule sets: %w", err)
 	}
 
+	for k := range rules {
+		logger.Debug("loaded rule", "key", k)
+	}
+
 	// Start with the base options from the engine.
 	opts := make([]cel.EnvOption, len(engine.baseOpts))
 	copy(opts, engine.baseOpts)
@@ -85,38 +89,34 @@ func (v *Validator) Validate(obj any) error {
 	typ := val.Type()
 	var typeName string
 	if pkgPath := typ.PkgPath(); pkgPath != "" {
-		// To match the parser's output, we might need to adjust how the package name is derived.
-		// The parser uses `pkg.Name`, which is usually the last part of the import path.
-		// For now, let's assume `typ.PkgPath()` gives us something we can work with.
-		// A more robust solution might require passing the package name map from the parser.
-		// Let's use a simple approach for now.
-		typeName = fmt.Sprintf("%s.%s", typ.Name(), typ.Name()) // placeholder, needs fix
-	} else {
-		typeName = typ.String()
-	}
-	pkgPath := typ.PkgPath()
-	pkgName := ""
-	if pkgPath != "" {
-		// This is a simplification. `go/packages` might give a different
-		// name than the last part of the path for complex module setups.
-		// But for typical cases, this is a reasonable approximation.
 		parts := strings.Split(pkgPath, "/")
-		pkgName = parts[len(parts)-1]
-	}
-
-	if pkgName != "" {
+		pkgName := parts[len(parts)-1]
+		// typ.String() can be "pkg.Type" or "pkg.Type[T]"
+		// typ.Name() is just "Type" or "Type[T]"
+		// We need to construct "pkgName.Name"
 		typeName = fmt.Sprintf("%s.%s", pkgName, typ.Name())
 	} else {
 		typeName = typ.String()
 	}
 
+	// Also normalize the top-level type name if it's generic.
+	originalTypeName := typeName
+	if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
+		baseName := typeName[:genericMarkerPos]
+		v.logger.Debug("detected generic type at top level", "original", typeName, "base", baseName)
+		if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
+			v.logger.Debug("found matching generic rule at top level", "from", baseName, "to", typeSpecName)
+			typeName = typeSpecName
+		}
+	}
+
 
 	if _, ok := v.adapters[typeName]; !ok {
 		// Fallback for anonymous structs or other edge cases.
-		if _, ok := v.adapters[typ.String()]; !ok {
-			return NewFatalError(fmt.Sprintf("no TypeAdapter registered for type %s or %s", typeName, typ.String()))
+		if _, ok := v.adapters[originalTypeName]; !ok {
+			return NewFatalError(fmt.Sprintf("no TypeAdapter registered for type %s or %s", typeName, originalTypeName))
 		}
-		typeName = typ.String()
+		typeName = originalTypeName
 	}
 
 	// Use a helper function to perform the validation recursively.
@@ -127,6 +127,58 @@ func (v *Validator) Validate(obj any) error {
 	}
 	return nil
 }
+
+// getTypeName constructs a predictable type name string (e.g., "sources.User") from a reflect.Type.
+func (v *Validator) getTypeName(typ reflect.Type) string {
+	if pkgPath := typ.PkgPath(); pkgPath != "" {
+		parts := strings.Split(pkgPath, "/")
+		pkgName := parts[len(parts)-1]
+		return fmt.Sprintf("%s.%s", pkgName, typ.Name())
+	}
+	return typ.String() // Handle anonymous or built-in types
+}
+
+// dereferenceAndAdapt handles the crucial step of preparing a value for CEL evaluation.
+// It dereferences pointers and, if the underlying value is a struct with a registered
+// TypeAdapter, it uses the adapter to convert the struct to a map[string]any.
+func (v *Validator) dereferenceAndAdapt(value any) any {
+	rv := reflect.ValueOf(value)
+
+	// We only need to do something special for pointers.
+	if rv.Kind() != reflect.Ptr {
+		return value
+	}
+	if rv.IsNil() {
+		return nil // CEL handles nil as 'null'.
+	}
+
+	elem := rv.Elem()
+	elemInterface := elem.Interface()
+
+	// If the pointer points to a struct, try to adapt it.
+	if elem.Kind() == reflect.Struct {
+		typeName := v.getTypeName(elem.Type())
+		// Also check for the generic version of the type name.
+		if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
+			baseName := typeName[:genericMarkerPos]
+			if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
+				typeName = typeSpecName
+			}
+		}
+
+		if adapter, ok := v.adapters[typeName]; ok {
+			adapted, err := adapter(elemInterface)
+			if err == nil {
+				return adapted // Success! Return the map.
+			}
+			v.logger.Warn("TypeAdapter failed for value", "type", typeName, "error", err)
+		}
+	}
+
+	// For non-struct pointers, or if the adapter fails, return the dereferenced value.
+	return elemInterface
+}
+
 
 // validateRecursive is the internal helper that performs the actual validation.
 func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
@@ -144,19 +196,24 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 		return
 	}
 	typ := val.Type()
-	pkgPath := typ.PkgPath()
-	pkgName := ""
-	if pkgPath != "" {
-		parts := strings.Split(pkgPath, "/")
-		pkgName = parts[len(parts)-1]
+	typeName := v.getTypeName(typ)
+
+	// Normalize generic type names for rule lookup.
+	// reflect.Type.Name() for "Box[string]" is "Box[string]".
+	// We want to match it to the parser's output "Box[T]".
+	if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
+		baseName := typeName[:genericMarkerPos]
+		v.logger.Debug("detected generic type", "original", typeName, "base", baseName)
+		// This is a simplification. It assumes a single type parameter named T.
+		// A more robust solution would parse the type parameters from the parser
+		// and use them here.
+		// For now, let's align with the test case `Box[T]`.
+		if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
+			v.logger.Debug("found matching generic rule", "from", baseName, "to", typeSpecName)
+			typeName = typeSpecName
+		}
 	}
 
-	var typeName string
-	if pkgName != "" {
-		typeName = fmt.Sprintf("%s.%s", pkgName, typ.Name())
-	} else {
-		typeName = typ.String() // Handle anonymous structs
-	}
 
 	// Get the adapter for the current type. If none, we can't validate its fields with CEL.
 	adapter, hasAdapter := v.adapters[typeName]
@@ -179,7 +236,14 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 		}
 
 		// Apply type rules using the objectEnv.
-		objectVars := map[string]any{"self": objMap}
+		adaptedMapForTypeRules := make(map[string]any, len(objMap))
+		for k, val := range objMap {
+			adaptedMapForTypeRules[k] = val // Start with the original value
+			// For type rules, we need to adapt the values *within* the 'self' map.
+			adaptedMapForTypeRules[k] = v.dereferenceAndAdapt(val)
+		}
+		objectVars := map[string]any{"self": adaptedMapForTypeRules}
+
 		for _, rule := range ruleSet.TypeRules {
 			prog, err := v.engine.getProgram(v.objectEnv, rule)
 			if err != nil {
@@ -207,7 +271,11 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 				v.logger.Warn("field not found in adapted map", "field", fieldName, "type", typeName)
 				continue
 			}
-			fieldVars := map[string]any{"self": fieldVal}
+
+			// For field rules, 'self' is the field's value itself.
+			// We adapt it before passing it to CEL.
+			adaptedFieldVal := v.dereferenceAndAdapt(fieldVal)
+			fieldVars := map[string]any{"self": adaptedFieldVal}
 
 			for _, rule := range rules {
 				prog, err := v.engine.getProgram(v.fieldEnv, rule)
@@ -270,4 +338,18 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 			}
 		}
 	}
+}
+
+// getGenericTypeName finds a generic type name from the rules map that matches a base name.
+// For example, given "main.Box", it might find "main.Box[T]".
+func (v *Validator) getGenericTypeName(baseName string) (string, bool) {
+	// This is inefficient but works for the purpose of this library where the number
+	// of rules is not expected to be astronomically large.
+	// A better approach might be to pre-process the rule keys into a more searchable structure.
+	for key := range v.rules {
+		if strings.HasPrefix(key, baseName+"[") {
+			return key, true
+		}
+	}
+	return "", false
 }

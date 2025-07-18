@@ -72,7 +72,28 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 					if !ok {
 						continue
 					}
-					structName := typeSpec.Name.Name
+
+					var structNameBuilder strings.Builder
+					structNameBuilder.WriteString(typeSpec.Name.Name)
+
+					if typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0 {
+						structNameBuilder.WriteString("[")
+						for i, p := range typeSpec.TypeParams.List {
+							if i > 0 {
+								structNameBuilder.WriteString(", ")
+							}
+							// p.Names is a list of identifiers, e.g., "T" in T any
+							for j, name := range p.Names {
+								if j > 0 {
+									structNameBuilder.WriteString(", ")
+								}
+								structNameBuilder.WriteString(name.Name)
+							}
+						}
+						structNameBuilder.WriteString("]")
+					}
+					structName := structNameBuilder.String()
+
 					ruleSet := veritas.ValidationRuleSet{
 						FieldRules: make(map[string][]string),
 					}
@@ -401,6 +422,11 @@ func (p *Parser) categorizeType(tv types.Type) string {
 	}
 
 	switch t := tv.(type) {
+	case *types.TypeParam:
+		// For a generic type parameter `T`, we can't know the concrete type at parse time.
+		// We'll treat it like a pointer for shorthands like `required` -> `!= null`.
+		// This is a reasonable default for `any` constraints.
+		return "ptr"
 	case *types.Basic:
 		switch {
 		case t.Info()&types.IsString != 0:

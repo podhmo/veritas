@@ -112,6 +112,17 @@ func TestRun(t *testing.T) {
 				"Name": {`self != ""`},
 			},
 		},
+		"sources.Box[T]": {
+			TypeRules: []string{"self.Value != null"},
+			FieldRules: map[string][]string{
+				"Value": {`self != null`},
+			},
+		},
+		"sources.Item": {
+			FieldRules: map[string][]string{
+				"Name": {`self != ""`},
+			},
+		},
 	}
 
 	// Compare the actual result with the expected result.
