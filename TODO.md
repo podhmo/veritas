@@ -119,14 +119,14 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Implement Go code generation as the primary, recommended method for rule management, improving type-safety, performance, and developer experience.
 
--   **[ ] 5.1: Enhance CLI for Go Code Generation**
-    -   [ ] 5.1.1: Add a `--format=go` flag to the `veritas` CLI to enable Go source code output. The default will remain `--format=json` for backward compatibility in v1.x.
-    -   [ ] 5.1.2: Implement the core logic to generate a Go source file (e.g., `generated_rules.go`) containing `veritas.ValidationRuleSet` definitions.
-    -   [ ] 5.1.3: The generated file will use an `init()` function to register नियम sets into a global registry.
+-   **[x] 5.1: Enhance CLI for Go Code Generation**
+    -   [x] 5.1.1: Add a `--format=go` flag to the `veritas` CLI to enable Go source code output. The default will remain `--format=json` for backward compatibility in v1.x.
+    -   [x] 5.1.2: Implement the core logic to generate a Go source file (e.g., `generated_rules.go`) containing `veritas.ValidationRuleSet` definitions.
+    -   [x] 5.1.3: The generated file will use an `init()` function to register rule sets into a global registry.
 
--   **[ ] 5.2: Implement Static Rule Provider**
-    -   [ ] 5.2.1: Create a global rule registry within the `veritas` library that can be populated by the `init()` functions of generated code.
-    -   [ ] 5.2.2: Update `veritas.NewValidator()` to be able to use this global registry by default, removing the need to pass a `RuleProvider` for the common use-case.
+-   **[x] 5.2: Implement Static Rule Provider**
+    -   [x] 5.2.1: Create a global rule registry within the `veritas` library that can be populated by the `init()` functions of generated code.
+    -   [x] 5.2.2: Update `veritas.NewValidator()` to be able to use this global registry by default, removing the need to pass a `RuleProvider` for the common use-case.
     -   [ ] 5.2.3: The existing `JSONRuleProvider` will be kept for users who need dynamic rule loading.
 
 -   **[ ] 5.3: Update Documentation and Tooling**
