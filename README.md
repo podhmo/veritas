@@ -13,6 +13,10 @@ It aims to provide a robust validation framework where rules are derived directl
 - **Type-Safe**: Designed to handle complex, nested data structures, including pointers, slices, and maps, with type-safety in mind.
 - **Modern Go**: Built with Go 1.24, `log/slog` for structured logging, and `go-cmp` for testing.
 
+## Project Name
+
+The name "Veritas" is Latin for "truth." It was chosen to symbolize the library's core function: to verify the "truthfulness" or correctness of data against a defined set of rules.
+
 ## Installation
 
 ```bash
