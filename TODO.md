@@ -55,16 +55,16 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 3.1.1: Implement recursive validation for nested structs.
     -   [x] 3.1.2: Implement logic to safely dereference and validate pointer fields (achieved by generating `!= nil` checks from `required` tag).
 
--   **[ ] 3.2: Slice (`[]T`) Support**
-    -   [ ] 3.2.1: Support a `dive` keyword in the `validate` tag to apply rules to each element of a slice.
+-   **[x] 3.2: Slice (`[]T`) Support**
+    -   [x] 3.2.1: Support a `dive` keyword in the `validate` tag to apply rules to each element of a slice.
     -   [ ] 3.2.2: Include the array index in error messages (e.g., `User.Scores[2]: is invalid`).
 
--   **[ ] 3.3: Map (`map[K]V`) Support**
-    -   [ ] 3.3.1: Support `keys` and `values` keywords to apply rules to a map's keys and values, respectively.
+-   **[x] 3.3: Map (`map[K]V`) Support**
+    -   [x] 3.3.1: Support `keys` and `values` keywords to apply rules to a map's keys and values, respectively.
     -   [ ] 3.3.2: Include the map key in error messages (e.g., `User.Metadata['user_id']: is invalid`).
 
--   **[ ] 3.4: Advanced Structure Testing**
-    -   [ ] 3.4.1: Expand the test suite to include complex structs with slices, maps, and nested pointers.
+-   **[x] 3.4: Advanced Structure Testing**
+    -   [x] 3.4.1: Expand the test suite to include complex structs with slices, maps, and nested pointers.
 
 ## Phase 4: General Availability (GA) Finalization (v1.0)
 

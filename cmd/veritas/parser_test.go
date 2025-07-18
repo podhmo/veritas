@@ -17,15 +17,11 @@ func TestParser(t *testing.T) {
 		// The key is now the fully qualified type name
 		want := map[string]veritas.ValidationRuleSet{
 			"sources.MockUser": {
-				TypeRules: []string{
-					"self.Age >= 18",
-				},
+				TypeRules: []string{"self.Age >= 18"},
 				FieldRules: map[string][]string{
-					// "required" on a string field doesn't make sense with the new logic, as value types cannot be nil.
-					// We'll test "nonzero" instead.
 					"Name":  {`self != ""`},
-					"Email": {`self != ""`, `self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
-					"ID":    {`self != nil`}, // required for pointer type
+					"Email": {`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`},
+					"ID":    {`self != nil`},
 				},
 			},
 			"sources.MockVariety": {
@@ -36,7 +32,29 @@ func TestParser(t *testing.T) {
 					"Metadata": {"self.size() > 0"},
 				},
 			},
-		}
+			"sources.MockComplexData": {
+				FieldRules: map[string][]string{
+					"UserEmails": {`self.all(x, x.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$'))`},
+					"ResourceMap": {
+						`self.all(k, k.startsWith('id_'))`,
+						`self.all(v, v != nil)`,
+					},
+					"Users":  {`self.all(x, x != nil)`},
+					"Matrix": {`self.all(x, x.all(x, x != 0))`},
+				},
+		},
+		"sources.MockMoreComplexData": {
+			FieldRules: map[string][]string{
+				"ListOfMaps": {
+					`self.all(x, x != nil && x.all(k, k.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')) && x.all(v, v != ""))`,
+				},
+				"MapOfSlices": {
+					`self.all(k, k != "")`,
+					`self.all(v, v.all(x, x != ""))`,
+				},
+			},
+		},
+	}
 
 		// Parse the directory containing the test file.
 		got, err := p.Parse("../../testdata/sources")

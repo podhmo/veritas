@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
-	"go/token" // Imported
+	"go/token"
 	"go/types"
 	"log/slog"
 	"reflect"
@@ -13,13 +13,10 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// shorthandCELMap defines the mapping from a shorthand validation tag to its
-// corresponding CEL expression. The value can be a simple string for a general rule,
-// or a map[string]string for type-specific rules.
 var shorthandCELMap = map[string]any{
-	"required": "self != nil", // General rule for pointers, interfaces, etc.
+	"required": "self != nil",
 	"nonzero": map[string]string{
-		"string": "self != \"\"",
+		"string": `self != ""`,
 		"int":    "self != 0",
 		"uint":   "self != 0",
 		"float":  "self != 0.0",
@@ -31,18 +28,14 @@ var shorthandCELMap = map[string]any{
 	"email": `self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`,
 }
 
-// Parser is responsible for parsing Go source files to extract validation rules.
 type Parser struct {
 	logger *slog.Logger
 }
 
-// NewParser creates a new parser.
 func NewParser(logger *slog.Logger) *Parser {
 	return &Parser{logger: logger}
 }
 
-// Parse scans the given path for Go source files and extracts validation
-// rules from struct tags and special comments.
 func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
@@ -70,31 +63,24 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 					if !ok {
 						continue
 					}
-
 					structType, ok := typeSpec.Type.(*ast.StructType)
 					if !ok {
 						continue
 					}
-
 					structName := typeSpec.Name.Name
-					p.logger.Debug("found struct", "name", structName, "package", pkg.PkgPath)
-
 					ruleSet := veritas.ValidationRuleSet{
 						FieldRules: make(map[string][]string),
 					}
 
-					// Extract type-level rules from comments
 					if doc := genDecl.Doc; doc != nil {
 						for _, comment := range doc.List {
 							if strings.HasPrefix(comment.Text, "// @cel:") {
 								rule := strings.TrimSpace(strings.TrimPrefix(comment.Text, "// @cel:"))
 								ruleSet.TypeRules = append(ruleSet.TypeRules, rule)
-								p.logger.Debug("found type rule", "struct", structName, "rule", rule)
 							}
 						}
 					}
 
-					// Extract field-level rules from tags
 					for _, field := range structType.Fields.List {
 						if field.Tag == nil || len(field.Names) == 0 {
 							continue
@@ -113,16 +99,17 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 						}
 
 						rawRules := strings.Split(validateTag, ",")
-						celRules := p.processRules(rawRules, tv)
-
+						celRules, err := p.processRules(rawRules, tv)
+						if err != nil {
+							p.logger.Warn("error processing rules", "field", fieldName, "error", err)
+							continue
+						}
 						if len(celRules) > 0 {
 							ruleSet.FieldRules[fieldName] = celRules
-							p.logger.Debug("found field rules", "struct", structName, "field", fieldName, "rules", celRules)
 						}
 					}
 
 					if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
-						// Use fully qualified name for uniqueness
 						fullTypeName := fmt.Sprintf("%s.%s", pkg.Name, structName)
 						ruleSets[fullTypeName] = ruleSet
 					}
@@ -135,41 +122,172 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 	return ruleSets, nil
 }
 
-func (p *Parser) processRules(rawRules []string, tv types.Type) []string {
-	celRules := make([]string, 0, len(rawRules))
-	for _, rule := range rawRules {
-		trimmedRule := strings.TrimSpace(rule)
-		if trimmedRule == "" {
-			continue
+func (p *Parser) processRules(rawRules []string, tv types.Type) ([]string, error) {
+	var rules []*Rule
+	var err error
+	remaining := rawRules
+	for len(remaining) > 0 {
+		var rule *Rule
+		rule, remaining, err = p.parseRule(remaining, tv)
+		if err != nil {
+			return nil, err
 		}
-
-		if strings.HasPrefix(trimmedRule, "cel:") {
-			celRules = append(celRules, strings.TrimPrefix(trimmedRule, "cel:"))
-			continue
-		}
-
-		cel, ok := shorthandCELMap[trimmedRule]
-		if !ok {
-			p.logger.Warn("unsupported validation shorthand", "shorthand", trimmedRule)
-			continue
-		}
-
-		switch v := cel.(type) {
-		case string:
-			celRules = append(celRules, v)
-		case map[string]string:
-			typeCategory := p.categorizeType(tv)
-			if expr, ok := v[typeCategory]; ok {
-				celRules = append(celRules, expr)
-			} else {
-				p.logger.Warn("shorthand not applicable for type category", "shorthand", trimmedRule, "category", typeCategory)
-			}
-		}
+		rules = append(rules, rule)
 	}
-	return celRules
+
+	var celRules []string
+	for _, rule := range rules {
+		cel, err := rule.ToCEL()
+		if err != nil {
+			return nil, err
+		}
+		celRules = append(celRules, cel)
+	}
+	return celRules, nil
 }
 
-// categorizeType determines the general category of a type for rule mapping.
+type Rule struct {
+	TV        types.Type
+	BaseVar   string
+	Directive string
+	SubRules  []string
+	Nested    []*Rule
+	parser    *Parser
+}
+
+func (r *Rule) ToCEL() (string, error) {
+	if r.Directive == "" {
+		var conditions []string
+		for _, shorthand := range r.SubRules {
+			if shorthand == "" {
+				continue
+			}
+			cel := r.parser.shorthandToCEL(shorthand, r.TV, r.BaseVar)
+			if cel != "" {
+				conditions = append(conditions, cel)
+			}
+		}
+		return strings.Join(conditions, " && "), nil
+	}
+
+	var varName string
+	switch r.Directive {
+	case "dive":
+		varName = "x"
+	case "keys":
+		varName = "k"
+	case "values":
+		varName = "v"
+	}
+
+	var nestedCELs []string
+	for _, nestedRule := range r.Nested {
+		nestedRule.BaseVar = varName
+		cel, err := nestedRule.ToCEL()
+		if err != nil {
+			return "", err
+		}
+		nestedCELs = append(nestedCELs, cel)
+	}
+
+	return fmt.Sprintf("%s.all(%s, %s)", r.BaseVar, varName, strings.Join(nestedCELs, " && ")), nil
+}
+
+func (p *Parser) parseRule(rawRules []string, tv types.Type) (*Rule, []string, error) {
+	if len(rawRules) == 0 {
+		return nil, nil, nil
+	}
+	token := strings.TrimSpace(rawRules[0])
+
+	rule := &Rule{TV: tv, BaseVar: "self", parser: p}
+
+	switch token {
+	case "dive":
+		slice, ok := tv.Underlying().(*types.Slice)
+		if !ok {
+			return nil, nil, fmt.Errorf("'dive' on non-slice type: %s", tv.String())
+		}
+		rule.Directive = "dive"
+
+		var nestedRules []*Rule
+		remaining := rawRules[1:]
+		for len(remaining) > 0 {
+			var nested *Rule
+			var err error
+			nested, remaining, err = p.parseRule(remaining, slice.Elem())
+			if err != nil {
+				return nil, nil, err
+			}
+			nestedRules = append(nestedRules, nested)
+		}
+		rule.Nested = nestedRules
+		return rule, remaining, nil
+	case "keys":
+		m, ok := tv.Underlying().(*types.Map)
+		if !ok {
+			return nil, nil, fmt.Errorf("'keys' on non-map type: %s", tv.String())
+		}
+		rule.Directive = "keys"
+		nested, remaining, err := p.parseRule(rawRules[1:], m.Key())
+		if err != nil {
+			return nil, nil, err
+		}
+		rule.Nested = []*Rule{nested}
+		return rule, remaining, nil
+	case "values":
+		m, ok := tv.Underlying().(*types.Map)
+		if !ok {
+			return nil, nil, fmt.Errorf("'values' on non-map type: %s", tv.String())
+		}
+		rule.Directive = "values"
+		nested, remaining, err := p.parseRule(rawRules[1:], m.Elem())
+		if err != nil {
+			return nil, nil, err
+		}
+		rule.Nested = []*Rule{nested}
+		return rule, remaining, nil
+	default:
+		// Find end of shorthands
+		end := 0
+		for i, t := range rawRules {
+			trimmed := strings.TrimSpace(t)
+			if trimmed == "dive" || trimmed == "keys" || trimmed == "values" {
+				break
+			}
+			end = i + 1
+		}
+		rule.SubRules = rawRules[:end]
+		return rule, rawRules[end:], nil
+	}
+}
+
+func (p *Parser) shorthandToCEL(shorthand string, tv types.Type, varName string) string {
+	if strings.HasPrefix(shorthand, "cel:") {
+		return strings.ReplaceAll(strings.TrimPrefix(shorthand, "cel:"), "self", varName)
+	}
+
+	cel, ok := shorthandCELMap[shorthand]
+	if !ok {
+		p.logger.Warn("unsupported validation shorthand", "shorthand", shorthand)
+		return ""
+	}
+
+	var exprTpl string
+	switch v := cel.(type) {
+	case string:
+		exprTpl = v
+	case map[string]string:
+		typeCategory := p.categorizeType(tv)
+		var tplOk bool
+		exprTpl, tplOk = v[typeCategory]
+		if !tplOk {
+			p.logger.Warn("shorthand not applicable for type category", "shorthand", shorthand, "category", typeCategory)
+			return ""
+		}
+	}
+	return strings.ReplaceAll(exprTpl, "self", varName)
+}
+
 func (p *Parser) categorizeType(tv types.Type) string {
 	switch t := tv.Underlying().(type) {
 	case *types.Basic:
@@ -195,7 +313,7 @@ func (p *Parser) categorizeType(tv types.Type) string {
 	case *types.Map:
 		return "map"
 	case *types.Interface:
-		return "ptr" // Treat interfaces like pointers for nil checks
+		return "ptr"
 	default:
 		return "other"
 	}
