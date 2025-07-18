@@ -57,3 +57,20 @@ type EmbeddedUser struct {
 	Base
 	Name string `validate:"required"`
 }
+
+type ComplexUser struct {
+	Name     string   `validate:"required"`
+	Scores   []int    `validate:"cel:self.all(x, x >= 0)"`
+	Metadata map[string]string
+}
+
+type Profile struct {
+	Platform string `validate:"required"`
+	Handle   string `validate:"required,cel:self.size() > 2"`
+}
+
+type UserWithProfiles struct {
+	Name     string             `validate:"required"`
+	Profiles []Profile          // Slice of structs
+	Contacts map[string]Profile // Map of structs
+}

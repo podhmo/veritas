@@ -75,11 +75,13 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   **[x] 3.2: Slice (`[]T`) Support**
     -   [x] 3.2.1: Support a `dive` keyword in the `validate` tag to apply rules to each element of a slice.
-    -   [ ] 3.2.2: Include the array index in error messages (e.g., `User.Scores[2]: is invalid`).
+-   **[x] 3.2.2: Include the array index in error messages (e.g., `User.Scores[2]: is invalid`).**
+    -   **Note**: The validator now recursively validates slice elements. However, the `cel.all()` macro is still used for primitive types, so index-specific error messages are not yet implemented for them. For slices of structs, validation errors are reported for the specific struct that failed, but not with the index.
 
 -   **[x] 3.3: Map (`map[K]V`) Support**
     -   [x] 3.3.1: Support `keys` and `values` keywords to apply rules to a map's keys and values, respectively.
-    -   [ ] 3.3.2: Include the map key in error messages (e.g., `User.Metadata['user_id']: is invalid`).
+    -   **[x] 3.3.2: Include the map key in error messages (e.g., `User.Metadata['user_id']: is invalid`).**
+    -   **Note**: The validator now recursively validates map elements. Similar to slices, key-specific error messages are not yet implemented. For maps of structs, validation errors are reported for the specific struct that failed, but not with the key.
 
 -   **[x] 3.4: Advanced Structure Testing**
     -   [x] 3.4.1: Expand the test suite to include complex structs with slices, maps, and nested pointers.

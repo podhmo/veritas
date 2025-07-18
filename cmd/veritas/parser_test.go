@@ -65,6 +65,23 @@ func TestParser(t *testing.T) {
 					},
 				},
 			},
+		"sources.ComplexUser": {
+			FieldRules: map[string][]string{
+				"Name":   {`self != ""`},
+				"Scores": {`self.all(x, x >= 0)`},
+			},
+		},
+		"sources.Profile": {
+			FieldRules: map[string][]string{
+				"Platform": {`self != ""`},
+				"Handle":   {`self != "" && self.size() > 2`},
+			},
+		},
+		"sources.UserWithProfiles": {
+			FieldRules: map[string][]string{
+				"Name": {`self != ""`},
+			},
+		},
 		}
 
 		// Parse the directory containing the test file.

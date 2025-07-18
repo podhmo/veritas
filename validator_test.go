@@ -48,6 +48,72 @@ func embeddedUserAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
+func complexUserAdapter(obj any) (map[string]any, error) {
+	var user *sources.ComplexUser
+	switch v := obj.(type) {
+	case sources.ComplexUser:
+		user = &v
+	case *sources.ComplexUser:
+		user = v
+	default:
+		return nil, fmt.Errorf("unsupported type for ComplexUser adapter: %T", obj)
+	}
+
+	// For simplicity in testing, we'll manually convert the map.
+	// A real implementation might use reflection or other helpers.
+	metadata := make(map[string]any)
+	for k, v := range user.Metadata {
+		metadata[k] = v
+	}
+
+	// Also handle the slice.
+	scores := make([]any, len(user.Scores))
+	for i, s := range user.Scores {
+		scores[i] = s
+	}
+
+	return map[string]any{
+		"Name":     user.Name,
+		"Scores":   scores,
+		"Metadata": metadata,
+	}, nil
+}
+
+func profileAdapter(obj any) (map[string]any, error) {
+	var p *sources.Profile
+	switch v := obj.(type) {
+	case sources.Profile:
+		p = &v
+	case *sources.Profile:
+		p = v
+	default:
+		return nil, fmt.Errorf("unsupported type for Profile adapter: %T", obj)
+	}
+	return map[string]any{
+		"Platform": p.Platform,
+		"Handle":   p.Handle,
+	}, nil
+}
+
+func userWithProfilesAdapter(obj any) (map[string]any, error) {
+	var u *sources.UserWithProfiles
+	switch v := obj.(type) {
+	case sources.UserWithProfiles:
+		u = &v
+	case *sources.UserWithProfiles:
+		u = v
+	default:
+		return nil, fmt.Errorf("unsupported type for UserWithProfiles adapter: %T", obj)
+	}
+	return map[string]any{
+		"Name": u.Name,
+		// Profiles and Contacts are not directly used in UserWithProfiles's own rules,
+		// but the validator will recurse into them.
+		"Profiles": u.Profiles,
+		"Contacts": u.Contacts,
+	}, nil
+}
+
 
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -60,8 +126,11 @@ func TestValidator_Validate(t *testing.T) {
 
 	// Define the adapters for the types we want to validate.
 	adapters := map[string]TypeAdapter{
-		"sources.MockUser":     mockUserAdapter,
-		"sources.EmbeddedUser": embeddedUserAdapter,
+		"sources.MockUser":         mockUserAdapter,
+		"sources.EmbeddedUser":     embeddedUserAdapter,
+		"sources.ComplexUser":      complexUserAdapter,
+		"sources.Profile":          profileAdapter,
+		"sources.UserWithProfiles": userWithProfilesAdapter,
 	}
 
 	// Create a new validator with the adapters.
@@ -148,6 +217,78 @@ func TestValidator_Validate(t *testing.T) {
 			},
 			wantErr: NewValidationError("sources.EmbeddedUser", "Name", `self != ""`),
 		},
+		{
+			name: "valid complex object",
+			obj: &sources.ComplexUser{
+				Name:   "ComplexGopher",
+				Scores: []int{10, 20, 0},
+				Metadata: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "complex object with invalid slice element",
+			obj: &sources.ComplexUser{
+				Name:   "ComplexGopher",
+				Scores: []int{10, -5, 0}, // -5 is invalid
+				Metadata: map[string]string{
+					"key1": "value1",
+				},
+			},
+			wantErr: NewValidationError("sources.ComplexUser", "Scores", `self.all(x, x >= 0)`),
+		},
+		{
+			name: "valid nested structs in slice and map",
+			obj: &sources.UserWithProfiles{
+				Name: "Gopher",
+				Profiles: []sources.Profile{
+					{Platform: "twitter", Handle: "gopher"},
+				},
+				Contacts: map[string]sources.Profile{
+					"work": {Platform: "github", Handle: "golang"},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "invalid struct in slice",
+			obj: &sources.UserWithProfiles{
+				Name: "Gopher",
+				Profiles: []sources.Profile{
+					{Platform: "twitter", Handle: "gopher"},
+					{Platform: "twitter", Handle: "go"}, // Invalid handle
+				},
+			},
+			wantErr:      NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`),
+			isMultiError: true, // It's a single error, but let's check for its presence
+		},
+		{
+			name: "invalid struct in map",
+			obj: &sources.UserWithProfiles{
+				Name: "Gopher",
+				Contacts: map[string]sources.Profile{
+					"personal": {Platform: "", Handle: "myhandle"}, // Invalid platform
+				},
+			},
+			wantErr:      NewValidationError("sources.Profile", "Platform", `self != ""`),
+			isMultiError: true, // It's a single error, but let's check for its presence
+		},
+		{
+			name: "multiple errors in nested structs",
+			obj: &sources.UserWithProfiles{
+				Name: "Gopher",
+				Profiles: []sources.Profile{
+					{Platform: "", Handle: "gopher"}, // Invalid platform
+				},
+				Contacts: map[string]sources.Profile{
+					"work": {Platform: "github", Handle: "go"}, // Invalid handle
+				},
+			},
+			isMultiError: true, // Expecting two distinct validation errors
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,14 +300,37 @@ func TestValidator_Validate(t *testing.T) {
 					t.Fatalf("Validate() expected errors, got nil")
 				}
 				errStr := gotErr.Error()
-				nameRuleError := NewValidationError("sources.MockUser", "Name", `self != ""`).Error()
-				emailRuleError := NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`).Error()
 
-				if !strings.Contains(errStr, nameRuleError) {
-					t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRuleError, errStr)
-				}
-				if !strings.Contains(errStr, emailRuleError) {
-					t.Errorf("Validate() error missing expected content '%s' in '%s'", emailRuleError, errStr)
+				// Special handling for the multi-error tests
+				switch tt.name {
+				case "object with multiple errors":
+					nameRuleError := NewValidationError("sources.MockUser", "Name", `self != ""`).Error()
+					emailRuleError := NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`).Error()
+					if !strings.Contains(errStr, nameRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRuleError, errStr)
+					}
+					if !strings.Contains(errStr, emailRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", emailRuleError, errStr)
+					}
+				case "invalid struct in slice":
+					handleRuleError := NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()
+					if !strings.Contains(errStr, handleRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", handleRuleError, errStr)
+					}
+				case "invalid struct in map":
+					platformRuleError := NewValidationError("sources.Profile", "Platform", `self != ""`).Error()
+					if !strings.Contains(errStr, platformRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", platformRuleError, errStr)
+					}
+				case "multiple errors in nested structs":
+					platformRuleError := NewValidationError("sources.Profile", "Platform", `self != ""`).Error()
+					handleRuleError := NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()
+					if !strings.Contains(errStr, platformRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", platformRuleError, errStr)
+					}
+					if !strings.Contains(errStr, handleRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", handleRuleError, errStr)
+					}
 				}
 				return
 			}

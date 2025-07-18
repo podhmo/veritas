@@ -80,5 +80,35 @@
         "self.size() \u003e 0"
       ]
     }
+  },
+  "sources.ComplexUser": {
+    "typeRules": null,
+    "fieldRules": {
+      "Name": [
+        "self != \"\""
+      ],
+      "Scores": [
+        "self.all(x, x >= 0)"
+      ]
+    }
+  },
+  "sources.Profile": {
+    "typeRules": null,
+    "fieldRules": {
+      "Platform": [
+        "self != \"\""
+      ],
+      "Handle": [
+        "self != \"\" && self.size() > 2"
+      ]
+    }
+  },
+  "sources.UserWithProfiles": {
+    "typeRules": null,
+    "fieldRules": {
+      "Name": [
+        "self != \"\""
+      ]
+    }
   }
 }
