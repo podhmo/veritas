@@ -53,4 +53,4 @@ go test ./...
 
 # 補足情報
 
-- go-scanとはgithub.com/podhmo/go-scanのことです。またこれはトップレベルのパッケージそのもののことを指してます
+- veritas は github.com/podhmo/veritas のことです。これがトップレベルディレクトリです。
