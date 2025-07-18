@@ -95,8 +95,9 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 **Goal**: Support modern Go features, create comprehensive documentation, and polish the library for its official v1.0 release.
 
 -   **[ ] 4.1: Go Generics Support**
-    -   [ ] 4.1.1: Update the `veritas` tool to correctly parse generic `struct` definitions.
-    -   [ ] 4.1.2: Ensure the runtime `Validator` can correctly handle instantiated generic types via reflection.
+    -   [x] 4.1.1: Update the `veritas` tool to correctly parse generic `struct` definitions.
+    -   [~] 4.1.2: Ensure the runtime `Validator` can correctly handle instantiated generic types via reflection.
+        -   **Note**: The validator can now map generic type instances (e.g., `Box[string]`) to parsed rules (e.g., `Box[T]`). However, there are outstanding issues with `cel-go`'s handling of pointer values within these generic types, leading to `unsupported conversion` errors during evaluation. Further investigation is needed to either adjust the `TypeAdapter` logic or the `cel.Env` configuration to properly handle these cases.
 
 -   **[ ] 4.2: Performance and Stabilization**
     -   [ ] 4.2.1: Establish a benchmark suite to identify and optimize performance bottlenecks.
