@@ -13,23 +13,21 @@ import (
 func TestCustomFunctions(t *testing.T) {
 	t.Parallel()
 
-	// We don't care about the logger output for this test, but Handler must not be nil.
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
-	// Create an engine with our custom functions.
-	engine, err := NewEngine(logger, DefaultFunctions()...)
+	// Engine is not used directly, but its creation could be part of a setup.
+	_, err := NewEngine(logger)
 	if err != nil {
-		t.Fatalf("NewEngine() with custom functions failed: %v", err)
+		t.Fatalf("NewEngine() failed: %v", err)
 	}
 
 	tests := []struct {
-		name     string
-		rule     string
-		vars     map[string]any
-		want     any
-		wantErr  bool
-		errEquil func(a, b error) bool
+		name    string
+		rule    string
+		vars    map[string]any
+		want    any
+		wantErr bool
 	}{
 		{
 			name: "strings.ToUpper success",
@@ -39,19 +37,19 @@ func TestCustomFunctions(t *testing.T) {
 		},
 		{
 			name: "matches success",
-			rule: `custom.matches(email, '^[^@]+@[^@]+\\.[^@]+$')`,
+			rule: `matches(email, '^[^@]+@[^@]+\\.[^@]+$')`,
 			vars: map[string]any{"email": "test@example.com"},
 			want: true,
 		},
 		{
 			name: "matches failure",
-			rule: `custom.matches(email, '^[^@]+@[^@]+\\.[^@]+$')`,
+			rule: `matches(email, '^[^@]+@[^@]+\\.[^@]+$')`,
 			vars: map[string]any{"email": "not-an-email"},
 			want: false,
 		},
 		{
 			name:    "matches invalid regexp",
-			rule:    `custom.matches(email, '[')`, // Invalid regexp
+			rule:    `matches(email, '[')`,
 			vars:    map[string]any{"email": "test@example.com"},
 			wantErr: true,
 		},
@@ -61,18 +59,31 @@ func TestCustomFunctions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var envOpts []cel.EnvOption
+			// Create a new environment for each test, including the default functions.
+			envOpts := DefaultFunctions()
+
 			if tt.vars != nil {
 				for k := range tt.vars {
-					// For this test, we know all variables are strings.
-					// A more robust implementation would use reflection.
 					envOpts = append(envOpts, cel.Variable(k, cel.StringType))
 				}
 			}
 
-			prog, err := engine.getProgram(tt.rule, envOpts...)
+			env, err := cel.NewEnv(envOpts...)
 			if err != nil {
-				t.Fatalf("getProgram() failed: %v", err)
+				t.Fatalf("cel.NewEnv() failed: %v", err)
+			}
+
+			ast, issues := env.Compile(tt.rule)
+			if issues != nil && issues.Err() != nil {
+				if tt.wantErr {
+					return
+				}
+				t.Fatalf("Compile() failed: %v", issues.Err())
+			}
+
+			prog, err := env.Program(ast)
+			if err != nil {
+				t.Fatalf("env.Program() failed: %v", err)
 			}
 
 			out, _, err := prog.Eval(tt.vars)
@@ -81,8 +92,6 @@ func TestCustomFunctions(t *testing.T) {
 			}
 
 			if tt.wantErr {
-				// For error cases, we might just check that an error occurred.
-				// More specific error checking can be added if needed.
 				return
 			}
 

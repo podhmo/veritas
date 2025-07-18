@@ -11,20 +11,21 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 1.1.2: Use `log/slog` for internal tracing. Log cache misses and program generations at the `Debug` level.
     -   [x] 1.1.3: Implement a framework to register custom CEL functions (e.g., `strings.ToUpper`, `matches`).
 
--   **[ ] 1.2: `Validator` Implementation**
-    -   [ ] 1.2.1: Define a `Validator` struct holding a reference to the `Engine` and a `map[string]ValidationRuleSet` for rule lookup by type name.
-    -   [ ] 1.2.2: Implement the primary `Validate(obj any) error` method. Use `log/slog.Error` for internal errors like reflection failures.
-    -   [ ] 1.2.3: Implement logic to apply `TypeRules` and `FieldRules` separately, aggregating all validation failures using `errors.Join`.
-    -   [ ] 1.2.4: Ensure error messages are contextual, including the type and field name (e.g., `User.Email: validation failed...`).
+-   **[x] 1.2: `Validator` Implementation**
+    -   [x] 1.2.1: Define a `Validator` struct holding a reference to the `Engine` and a `map[string]ValidationRuleSet` for rule lookup by type name.
+    -   [x] 1.2.2: Implement the primary `Validate(obj any) error` method. Use `log/slog.Error` for internal errors like reflection failures.
+    -   [x] 1.2.3: Implement logic to apply `TypeRules` and `FieldRules` separately, aggregating all validation failures using `errors.Join`.
+    -   [x] 1.2.4: Ensure error messages are contextual, including the type and field name (e.g., `User.Email: validation failed...`).
+    -   [x] 1.2.5: **[RESOLVED]** The `unsupported type` error in `cel-go` was bypassed by redesigning the API. Instead of attempting to register Go structs directly, the validator now requires a `TypeAdapter` function for each type. This function converts the struct to a `map[string]any`, which `cel-go` can handle reliably.
 
--   **[ ] 1.3: Rule Provider Implementation**
-    -   [ ] 1.3.1: Define the `ValidationRuleSet` struct (containing `TypeRules`, `FieldRules`).
-    -   [ ] 1.3.2: Implement `JSONRuleProvider` to load rule sets from a JSON file. Log I/O or parsing errors with `slog.Error`.
+-   **[x] 1.3: Rule Provider Implementation**
+    -   [x] 1.3.1: Define the `ValidationRuleSet` struct (containing `TypeRules`, `FieldRules`).
+    -   [x] 1.3.2: Implement `JSONRuleProvider` to load rule sets from a JSON file. Log I/O or parsing errors with `slog.Error`.
 
--   **[ ] 1.4: Unit Testing Foundation**
-    -   [ ] 1.4.1: Create a test suite for the `Validator` covering success, single failure, and multiple failure scenarios.
-    -   [ ] 1.4.2: Use `github.com/google/go-cmp/cmp` for all assertions, especially `cmpopts.EquateErrors` for error comparison.
-    -   [ ] 1.4.3: Adhere to the `want` and `got` variable naming convention for test comparisons.
+-   **[x] 1.4: Unit Testing Foundation**
+    -   [x] 1.4.1: Create a test suite for the `Validator` covering success, single failure, and multiple failure scenarios. The test suite has been updated to reflect the new `TypeAdapter`-based API.
+    -   [x] 1.4.2: Use `errors.Is`, `errors.As`, and direct error string comparison for assertions, moving away from `go-cmp` for `error` types due to complexities with `errors.Join`.
+    -   [x] 1.4.3: Adhere to the `want` and `got` variable naming convention for test comparisons.
 
 ## Phase 2: Static Analysis Tool Development (v0.2)
 
