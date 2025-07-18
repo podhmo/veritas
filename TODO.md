@@ -37,15 +37,15 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 2.2: Rule Extraction Logic**
     -   [x] 2.2.1: Extract field-level rules from `validate:"..."` struct tags.
     -   [x] 2.2.2: Extract type-level rules from special `// @cel: ...` comments preceding a `struct` definition.
-    -   [ ] 2.2.3: Implement a mapping from common shorthands (`required`, `email`, etc.) to their corresponding CEL expressions.
+    -   [x] 2.2.3: Implement a mapping from common shorthands (`required`, `email`, etc.) to their corresponding CEL expressions.
 
--   **[ ] 2.3: `veritas` CLI Implementation**
-    -   [ ] 2.3.1: Implement logic to output the extracted rules as a structured JSON file.
-    -   [ ] 2.3.2: Use `slog.Info` for progress reporting and `slog.Debug` for detailed parsing steps.
+-   [x] 2.3: `veritas` CLI Implementation
+    -   [x] 2.3.1: Implement logic to output the extracted rules as a structured JSON file.
+    -   [x] 2.3.2: Use `slog.Info` for progress reporting and `slog.Debug` for detailed parsing steps.
 
--   **[ ] 2.4: Static Analysis Tool Testing**
-    -   [ ] 2.4.1: Prepare sample Go source files and their expected JSON output as test data.
-    -   [ ] 2.4.2: Write tests that run the generator and compare the actual output against the expected JSON using `go-cmp/cmp`.
+-   [x] 2.4: Static Analysis Tool Testing
+    -   [x] 2.4.1: Prepare sample Go source files and their expected JSON output as test data.
+    -   [x] 2.4.2: Write tests that run the generator and compare the actual output against the expected JSON using `go-cmp/cmp`.
 
 ## Phase 3: Advanced Data Structures Support (v0.3)
 

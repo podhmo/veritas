@@ -12,6 +12,14 @@ import (
 	"github.com/podhmo/veritas"
 )
 
+// ShorthandCELMap provides a mapping from common validation shorthands to their
+// corresponding CEL expressions. Note that the `self` in the expression will
+// be replaced by `self.FieldName` during parsing.
+var ShorthandCELMap = map[string]string{
+	"required": "size(self) > 0", // Works for strings, slices, maps.
+	"email":    "self.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')",
+}
+
 // Parser is responsible for parsing Go source files to extract validation rules.
 type Parser struct {
 	logger *slog.Logger
@@ -71,18 +79,35 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 
 			// Extract field-level rules from tags
 			for _, field := range structType.Fields.List {
-				if field.Tag == nil {
+				if len(field.Names) == 0 || field.Tag == nil {
 					continue
 				}
+				fieldName := field.Names[0].Name
 				tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
 				validateTag, ok := tag.Lookup("validate")
 				if !ok {
 					continue
 				}
-				fieldName := field.Names[0].Name
-				rules := strings.Split(validateTag, ",")
-				ruleSet.FieldRules[fieldName] = rules
-				p.logger.Debug("found field rules", "struct", structName, "field", fieldName, "rules", rules)
+
+				rawRules := strings.Split(validateTag, ",")
+				celRules := make([]string, 0, len(rawRules))
+				for _, r := range rawRules {
+					trimmedRule := strings.TrimSpace(r)
+					celExpr, isShorthand := ShorthandCELMap[trimmedRule]
+					if isShorthand {
+						// For shorthands, we prepend the field name to `self` to form the expression.
+						// e.g., for field "Name" and shorthand "required", CEL becomes "self.Name != nil"
+						celRules = append(celRules, strings.Replace(celExpr, "self", "self."+fieldName, 1))
+					} else {
+						// If not a shorthand, it's assumed to be a raw CEL expression.
+						celRules = append(celRules, trimmedRule)
+					}
+				}
+
+				if len(celRules) > 0 {
+					ruleSet.FieldRules[fieldName] = celRules
+					p.logger.Debug("found field rules", "struct", structName, "field", fieldName, "rules", celRules)
+				}
 			}
 
 			if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
