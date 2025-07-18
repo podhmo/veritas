@@ -59,8 +59,8 @@ type EmbeddedUser struct {
 }
 
 type ComplexUser struct {
-	Name     string   `validate:"required"`
-	Scores   []int    `validate:"cel:self.all(x, x >= 0)"`
+	Name     string `validate:"required"`
+	Scores   []int  `validate:"cel:self.all(x, x >= 0)"`
 	Metadata map[string]string
 }
 
