@@ -1,0 +1,27 @@
+{
+  "user.User": {
+    "typeRules": [
+      "self.Password == self.PasswordConfirm"
+    ],
+    "fieldRules": {
+      "Name": [
+        "self != ''",
+        "self.size() < 50"
+      ],
+      "Email": [
+        "self != ''",
+        "self.matches('^[^@]+@[^@]+\\.[^@]+$')"
+      ],
+      "Age": [
+        "self >= 18"
+      ],
+      "Password": [
+        "self != ''",
+        "self.size() >= 10"
+      ],
+      "PasswordConfirm": [
+        "self != ''"
+      ]
+    }
+  }
+}````
