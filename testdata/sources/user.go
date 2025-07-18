@@ -74,3 +74,8 @@ type UserWithProfiles struct {
 	Profiles []Profile          // Slice of structs
 	Contacts map[string]Profile // Map of structs
 }
+
+// Password contains a password string to test complex regex.
+type Password struct {
+	Value string
+}

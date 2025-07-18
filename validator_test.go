@@ -152,6 +152,21 @@ func userWithProfilesAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
+func passwordAdapter(obj any) (map[string]any, error) {
+	var p *sources.Password
+	switch v := obj.(type) {
+	case sources.Password:
+		p = &v
+	case *sources.Password:
+		p = v
+	default:
+		return nil, fmt.Errorf("unsupported type for Password adapter: %T", obj)
+	}
+	return map[string]any{
+		"Value": p.Value,
+	}, nil
+}
+
 
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -164,6 +179,7 @@ func TestValidator_Validate(t *testing.T) {
 
 	// Define the adapters for the types we want to validate.
 	adapters := map[string]TypeAdapter{
+		"sources.Password":         passwordAdapter,
 		"sources.MockUser":         mockUserAdapter,
 		"sources.EmbeddedUser":     embeddedUserAdapter,
 		"sources.ComplexUser":      complexUserAdapter,
@@ -421,6 +437,22 @@ func TestValidator_Validate(t *testing.T) {
 				return ctx
 			}(),
 			wantErr: context.DeadlineExceeded,
+		},
+		{
+			name: "valid simple password",
+			obj: &sources.Password{
+				Value: "password123",
+			},
+			ctx:     context.Background(),
+			wantErr: nil,
+		},
+		{
+			name: "invalid simple password",
+			obj: &sources.Password{
+				Value: "weak",
+			},
+			ctx:     context.Background(),
+			wantErr: NewValidationError("sources.Password", "Value", `self.matches('^[a-zA-Z0-9]{8,}$')`),
 		},
 	}
 

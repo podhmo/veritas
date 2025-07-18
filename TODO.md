@@ -108,7 +108,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 4.3.2: Develop an example project demonstrating integration with a standard `net/http` server.
     -   [x] 4.3.2.1: Show how to decode a JSON request, run validation, and return a structured HTTP 400 error response.
     -   [x] 4.3.2.2: Use `slog` for structured request logging.
-    -   [ ] 4.3.3: **[TODO]** Investigate and fix the CEL `matches` function's regular expression parsing issue. The current workaround is to use `contains('@')`.
+    -   [x] 4.3.3: **[RESOLVED]** Investigated the CEL `matches` function's regular expression parsing. The root cause is that `cel-go`, following the official CEL specification, uses the RE2 regular expression engine, which does not support certain Perl-compatible (PCRE) features like lookaheads (e.g., `(?=...)`). This is a documented limitation of RE2, chosen for its linear-time performance and security guarantees. The "fix" is to use RE2-compatible regular expressions. The `email` shorthand regex was confirmed to be compatible. A new test case for password validation was added using a simple, RE2-compatible regex to confirm functionality.
     -   [ ] 4.3.4: **[TODO]** Improve the `veritas` CLI to handle type name resolution for the `main` package to avoid duplicating rules in `rules.json`. A new command line option like `--package-prefix-map` should be considered.
 
 -   **[ ] 4.4: Final API Review and Testing**

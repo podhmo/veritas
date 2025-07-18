@@ -110,6 +110,13 @@
       ]
     }
   },
+  "sources.Password": {
+    "fieldRules": {
+      "Value": [
+        "self.matches('^[a-zA-Z0-9]{8,}$')"
+      ]
+    }
+  },
   "sources.Profile": {
     "typeRules": null,
     "fieldRules": {
