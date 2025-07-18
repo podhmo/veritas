@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -33,10 +34,31 @@ func main() {
 }
 
 func run(inPath, outFile string, logger *slog.Logger) error {
-	// Placeholder for the main generation logic.
-	fmt.Printf("Parsing %s and writing to %s...\n", inPath, outFile)
-	// parser := NewParser(logger)
-	// ruleSet, err := parser.Parse(inPath)
-	// ...
+	logger.Debug("Initializing parser")
+	parser := NewParser(logger)
+
+	logger.Debug("Starting parsing", "path", inPath)
+	ruleSets, err := parser.Parse(inPath)
+	if err != nil {
+		return fmt.Errorf("error parsing source files: %w", err)
+	}
+	logger.Info("Parsing complete", "rule_sets_found", len(ruleSets))
+
+	if len(ruleSets) == 0 {
+		logger.Info("No validation rules found, nothing to write")
+		return nil
+	}
+
+	logger.Debug("Marshalling rule sets to JSON")
+	jsonData, err := json.MarshalIndent(ruleSets, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal rule sets to JSON: %w", err)
+	}
+
+	logger.Debug("Writing JSON to output file", "file", outFile)
+	if err := os.WriteFile(outFile, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write to output file %s: %w", outFile, err)
+	}
+
 	return nil
 }
