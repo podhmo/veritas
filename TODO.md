@@ -91,3 +91,22 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[ ] 4.4: Final API Review and Testing**
     -   [ ] 4.4.1: Implement end-to-end tests for the `net/http` example.
     -   [ ] 4.4.2: Conduct a final review of all public APIs to ensure stability for the v1.0 release.
+
+## Phase 5: Go Code Generation (v1.1 / v2.0)
+
+**Goal**: Implement Go code generation as the primary, recommended method for rule management, improving type-safety, performance, and developer experience.
+
+-   **[ ] 5.1: Enhance CLI for Go Code Generation**
+    -   [ ] 5.1.1: Add a `--format=go` flag to the `veritas` CLI to enable Go source code output. The default will remain `--format=json` for backward compatibility in v1.x.
+    -   [ ] 5.1.2: Implement the core logic to generate a Go source file (e.g., `generated_rules.go`) containing `veritas.ValidationRuleSet` definitions.
+    -   [ ] 5.1.3: The generated file will use an `init()` function to register नियम sets into a global registry.
+
+-   **[ ] 5.2: Implement Static Rule Provider**
+    -   [ ] 5.2.1: Create a global rule registry within the `veritas` library that can be populated by the `init()` functions of generated code.
+    -   [ ] 5.2.2: Update `veritas.NewValidator()` to be able to use this global registry by default, removing the need to pass a `RuleProvider` for the common use-case.
+    -   [ ] 5.2.3: The existing `JSONRuleProvider` will be kept for users who need dynamic rule loading.
+
+-   **[ ] 5.3: Update Documentation and Tooling**
+    -   [ ] 5.3.1: Thoroughly document the new Go code generation workflow, including `go:generate` examples.
+    -   [ ] 5.3.2: Update the main `README.md` and example projects to reflect Go code generation as the recommended approach.
+    -   [ ] 5.3.3: Ensure tests cover the end-to-end code generation and validation process.
