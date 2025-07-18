@@ -1,26 +1,38 @@
 package main
 
 import (
+	"log/slog"
+	"os"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/podhmo/veritas"
 )
 
 func TestParser(t *testing.T) {
-	t.Run("parse simple struct", func(t *testing.T) {
-		// Define a sample Go source code as a string.
-		// Use the parser to parse this string (or a temporary file).
-		// Compare the extracted rule set (`got`) with the expected rule set (`want`).
-		// Use `go-cmp/cmp` for the comparison.
+	t.Run("parse struct with tags and comments", func(t *testing.T) {
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		p := NewParser(logger)
 
-		// want := veritas.ValidationRuleSet{ ... }
-		// got, err := parser.Parse(...)
-		// if diff := cmp.Diff(want, got); diff != "" { ... }
+		want := map[string]veritas.ValidationRuleSet{
+			"MockUser": {
+				TypeRules: []string{
+					"self.Age >= 18",
+				},
+				FieldRules: map[string][]string{
+					"Name":  {"required"},
+					"Email": {"required", "email"},
+				},
+			},
+		}
 
-		t.Log("TestParser placeholder")
+		got, err := p.Parse("../../testdata/sources/user.go")
+		if err != nil {
+			t.Fatalf("Parse() error = %v, want nil", err)
+		}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Parse() mismatch (-want +got):\n%s", diff)
+		}
 	})
-
-	// TODO: Add more test cases for:
-	// - Multiple structs in one file.
-	// - Structs with no validation tags.
-	// - Structs with only type-level or only field-level rules.
-	// - All supported shorthands (required, email, etc.).
 }
