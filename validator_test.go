@@ -1,6 +1,7 @@
 package veritas
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/podhmo/veritas/testdata/sources"
 )
@@ -182,6 +184,7 @@ func TestValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name         string
 		obj          any
+		ctx          context.Context // Add context to test cases
 		wantErr      error
 		isMultiError bool // Flag for multi-error checks
 	}{
@@ -193,6 +196,7 @@ func TestValidator_Validate(t *testing.T) {
 				Age:   20,
 				ID:    intPtr(1),
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -203,6 +207,7 @@ func TestValidator_Validate(t *testing.T) {
 				Age:   20,
 				ID:    intPtr(1),
 			},
+			ctx:     context.Background(),
 			wantErr: errors.Join(NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`)),
 		},
 		{
@@ -213,6 +218,7 @@ func TestValidator_Validate(t *testing.T) {
 				Age:   20,
 				ID:    intPtr(1),
 			},
+			ctx:          context.Background(),
 			wantErr:      errors.New("multiple errors expected"),
 			isMultiError: true,
 		},
@@ -224,11 +230,13 @@ func TestValidator_Validate(t *testing.T) {
 				Age:   17, // Fails the type-level rule "self.Age >= 18"
 				ID:    intPtr(1),
 			},
+			ctx:     context.Background(),
 			wantErr: errors.Join(NewValidationError("sources.MockUser", "", "self.Age >= 18")),
 		},
 		{
 			name:    "unregistered type",
 			obj:     struct{ Age int }{10},
+			ctx:     context.Background(),
 			wantErr: NewFatalError("no TypeAdapter registered for type struct { Age int } or struct { Age int }"),
 		},
 		{
@@ -237,6 +245,7 @@ func TestValidator_Validate(t *testing.T) {
 				Base: sources.Base{ID: "ab"},
 				Name: "Gopher",
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -245,6 +254,7 @@ func TestValidator_Validate(t *testing.T) {
 				Base: sources.Base{ID: "a"}, // Fails size check
 				Name: "Gopher",
 			},
+			ctx:     context.Background(),
 			wantErr: NewValidationError("sources.EmbeddedUser", "ID", `self != "" && self.size() > 1`),
 		},
 		{
@@ -253,6 +263,7 @@ func TestValidator_Validate(t *testing.T) {
 				Base: sources.Base{ID: "ab"},
 				Name: "", // Fails required check
 			},
+			ctx:     context.Background(),
 			wantErr: NewValidationError("sources.EmbeddedUser", "Name", `self != ""`),
 		},
 		{
@@ -265,6 +276,7 @@ func TestValidator_Validate(t *testing.T) {
 					"key2": "value2",
 				},
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -276,6 +288,7 @@ func TestValidator_Validate(t *testing.T) {
 					"key1": "value1",
 				},
 			},
+			ctx:     context.Background(),
 			wantErr: NewValidationError("sources.ComplexUser", "Scores", `self.all(x, x >= 0)`),
 		},
 		{
@@ -289,6 +302,7 @@ func TestValidator_Validate(t *testing.T) {
 					"work": {Platform: "github", Handle: "golang"},
 				},
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -300,6 +314,7 @@ func TestValidator_Validate(t *testing.T) {
 					{Platform: "twitter", Handle: "go"}, // Invalid handle
 				},
 			},
+			ctx:          context.Background(),
 			wantErr:      NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`),
 			isMultiError: true, // It's a single error, but let's check for its presence
 		},
@@ -311,6 +326,7 @@ func TestValidator_Validate(t *testing.T) {
 					"personal": {Platform: "", Handle: "myhandle"}, // Invalid platform
 				},
 			},
+			ctx:          context.Background(),
 			wantErr:      NewValidationError("sources.Profile", "Platform", `self != ""`),
 			isMultiError: true, // It's a single error, but let's check for its presence
 		},
@@ -325,6 +341,7 @@ func TestValidator_Validate(t *testing.T) {
 					"work": {Platform: "github", Handle: "go"}, // Invalid handle
 				},
 			},
+			ctx:          context.Background(),
 			isMultiError: true, // Expecting two distinct validation errors
 		},
 		{
@@ -332,6 +349,7 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[string]{
 				Value: "hello",
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -339,6 +357,7 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[*string]{
 				Value: nil,
 			},
+			ctx:          context.Background(),
 			wantErr:      NewValidationError("sources.Box[T]", "Value", `self != null`),
 			isMultiError: true, // Expect both type and field errors
 		},
@@ -347,6 +366,7 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[*sources.Item]{
 				Value: &sources.Item{Name: "valid-item"},
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -354,6 +374,7 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[*sources.Item]{
 				Value: &sources.Item{Name: ""}, // name is required
 			},
+			ctx:          context.Background(),
 			wantErr:      NewValidationError("sources.Item", "Name", `self != ""`),
 			isMultiError: true,
 		},
@@ -362,6 +383,7 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[*int]{
 				Value: intPtr(123),
 			},
+			ctx:     context.Background(),
 			wantErr: nil,
 		},
 		{
@@ -369,14 +391,42 @@ func TestValidator_Validate(t *testing.T) {
 			obj: &sources.Box[*int]{
 				Value: nil,
 			},
+			ctx:          context.Background(),
 			wantErr:      NewValidationError("sources.Box[T]", "Value", `self != null`),
 			isMultiError: true, // Expect both type and field errors
+		},
+		{
+			name: "context cancelled",
+			obj: &sources.MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+			},
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			}(),
+			wantErr: context.Canceled,
+		},
+		{
+			name: "context timeout",
+			obj: &sources.MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+			},
+			ctx: func() context.Context {
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				time.Sleep(2 * time.Nanosecond) // Ensure timeout
+				cancel()
+				return ctx
+			}(),
+			wantErr: context.DeadlineExceeded,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotErr := validator.Validate(tt.obj)
+			gotErr := validator.Validate(tt.ctx, tt.obj)
 
 			if tt.isMultiError {
 				if gotErr == nil {

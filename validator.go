@@ -1,6 +1,7 @@
 package veritas
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -70,7 +71,7 @@ func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, ad
 }
 
 // Validate applies the configured rules to the given object, including nested structs.
-func (v *Validator) Validate(obj any) error {
+func (v *Validator) Validate(ctx context.Context, obj any) error {
 	// Keep track of all errors found during validation.
 	var allErrors []error
 
@@ -120,7 +121,7 @@ func (v *Validator) Validate(obj any) error {
 	}
 
 	// Use a helper function to perform the validation recursively.
-	v.validateRecursive(obj, &allErrors)
+	v.validateRecursive(ctx, obj, &allErrors)
 
 	if len(allErrors) > 0 {
 		return errors.Join(allErrors...)
@@ -181,7 +182,15 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 
 
 // validateRecursive is the internal helper that performs the actual validation.
-func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
+func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[]error) {
+	// Check for context cancellation before proceeding.
+	select {
+	case <-ctx.Done():
+		*allErrors = append(*allErrors, ctx.Err())
+		return
+	default:
+	}
+
 	// Dereference pointer to get the actual value.
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
@@ -252,7 +261,7 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 				continue
 			}
 
-			out, _, err := prog.Eval(objectVars)
+			out, _, err := prog.ContextEval(ctx, objectVars)
 			if err != nil {
 				v.logger.Error("failed to evaluate type rule", "rule", rule, "type", typeName, "error", err)
 				*allErrors = append(*allErrors, NewValidationError(typeName, "", fmt.Sprintf("evaluation error: %s", err)))
@@ -266,6 +275,14 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 
 		// Apply field rules using the fieldEnv.
 		for fieldName, rules := range ruleSet.FieldRules {
+			// Check for context cancellation before each field validation.
+			select {
+			case <-ctx.Done():
+				*allErrors = append(*allErrors, ctx.Err())
+				return
+			default:
+			}
+
 			fieldVal, ok := objMap[fieldName]
 			if !ok {
 				v.logger.Warn("field not found in adapted map", "field", fieldName, "type", typeName)
@@ -285,7 +302,7 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 					continue
 				}
 
-				out, _, err := prog.Eval(fieldVars)
+				out, _, err := prog.ContextEval(ctx, fieldVars)
 				if err != nil {
 					v.logger.Error("failed to evaluate field rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
 					*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err)))
@@ -310,12 +327,12 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 
 		switch fieldVal.Kind() {
 		case reflect.Struct:
-			v.validateRecursive(fieldVal.Interface(), allErrors)
+			v.validateRecursive(ctx, fieldVal.Interface(), allErrors)
 
 		case reflect.Ptr:
 			// Only recurse on pointers to structs.
 			if fieldVal.Type().Elem().Kind() == reflect.Struct {
-				v.validateRecursive(fieldVal.Interface(), allErrors)
+				v.validateRecursive(ctx, fieldVal.Interface(), allErrors)
 			}
 
 		case reflect.Slice:
@@ -323,7 +340,7 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 			for j := 0; j < fieldVal.Len(); j++ {
 				elem := fieldVal.Index(j)
 				if elem.CanInterface() {
-					v.validateRecursive(elem.Interface(), allErrors)
+					v.validateRecursive(ctx, elem.Interface(), allErrors)
 				}
 			}
 
@@ -333,7 +350,7 @@ func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
 			for iter.Next() {
 				elem := iter.Value()
 				if elem.CanInterface() {
-					v.validateRecursive(elem.Interface(), allErrors)
+					v.validateRecursive(ctx, elem.Interface(), allErrors)
 				}
 			}
 		}

@@ -101,7 +101,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   **[ ] 4.2: Performance and Stabilization**
     -   [ ] 4.2.1: Establish a benchmark suite to identify and optimize performance bottlenecks.
-    -   [ ] 4.2.2: Add `context.Context` to the `Validate` method signature to support timeouts and cancellation.
+    -   [x] 4.2.2: Add `context.Context` to the `Validate` method signature to support timeouts and cancellation.
 
 -   **[ ] 4.3: Documentation and Ecosystem**
     -   [ ] 4.3.1: Create a comprehensive documentation website detailing installation, usage, CLI commands, and all supported rules/shorthands.
