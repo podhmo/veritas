@@ -37,7 +37,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 2.2: Rule Extraction Logic**
     -   [x] 2.2.1: Extract field-level rules from `validate:"..."` struct tags.
     -   [x] 2.2.2: Extract type-level rules from special `// @cel: ...` comments preceding a `struct` definition.
-    -   [ ] 2.2.3: Implement a mapping from common shorthands (`required`, `email`, etc.) to their corresponding CEL expressions.
+    -   [x] 2.2.3: Implement a mapping from common shorthands (`required`, `nonzero`, `email`, etc.) to their corresponding CEL expressions using type-aware analysis.
 
 -   **[ ] 2.3: `veritas` CLI Implementation**
     -   [ ] 2.3.1: Implement logic to output the extracted rules as a structured JSON file.
@@ -53,7 +53,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   **[ ] 3.1: Pointer and Nested Struct Handling**
     -   [ ] 3.1.1: Implement recursive validation for nested structs.
-    -   [ ] 3.1.2: Implement logic to safely dereference and validate pointer fields.
+    -   [x] 3.1.2: Implement logic to safely dereference and validate pointer fields (achieved by generating `!= nil` checks from `required` tag).
 
 -   **[ ] 3.2: Slice (`[]T`) Support**
     -   [ ] 3.2.1: Support a `dive` keyword in the `validate` tag to apply rules to each element of a slice.
