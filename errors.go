@@ -42,9 +42,32 @@ func NewFatalError(message string) error {
 	return &FatalError{Message: message}
 }
 
-// This file can be used to define custom error types for more granular
-// error handling by the library's users. For example, a specific
-// ValidationError type could be defined.
+// ToErrorMap converts a validation error into a map of field names to error messages.
+// If the error is not a composition of ValidationErrors, it returns nil.
+func ToErrorMap(err error) map[string]string {
+	var validationErrs []*ValidationError
+	if errs, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range errs.Unwrap() {
+			if ve, ok := e.(*ValidationError); ok {
+				validationErrs = append(validationErrs, ve)
+			}
+		}
+	} else if ve, ok := err.(*ValidationError); ok {
+		validationErrs = append(validationErrs, ve)
+	}
 
-// For now, we will rely on wrapping errors with fmt.Errorf and joining
-// them with errors.Join.
+	if len(validationErrs) == 0 {
+		return nil
+	}
+
+	errMap := make(map[string]string)
+	for _, ve := range validationErrs {
+		// Use FieldName for field-specific errors, and a general key for type-level errors.
+		key := ve.FieldName
+		if key == "" {
+			key = ve.TypeName
+		}
+		errMap[key] = ve.Rule
+	}
+	return errMap
+}

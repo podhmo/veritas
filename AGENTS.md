@@ -17,8 +17,9 @@ goimports -w ./...
 
 以下を実行してコンパイルエラーが出ないことを確認してください。エラーが出た場合は修正してください。
 
-```
+```shell
 go test ./...
+go test -C ./examples/http-server ./...
 ```
 
 # コミュニケーション
