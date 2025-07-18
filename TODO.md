@@ -111,7 +111,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 4.3.3: **[RESOLVED]** Investigated the CEL `matches` function's regular expression parsing. The root cause is that `cel-go`, following the official CEL specification, uses the RE2 regular expression engine, which does not support certain Perl-compatible (PCRE) features like lookaheads (e.g., `(?=...)`). This is a documented limitation of RE2, chosen for its linear-time performance and security guarantees. The "fix" is to use RE2-compatible regular expressions. The `email` shorthand regex was confirmed to be compatible. A new test case for password validation was added using a simple, RE2-compatible regex to confirm functionality.
     -   [x] 4.3.4: **[RESOLVED]** The `veritas` CLI now uses `pkg.PkgPath` instead of `pkg.Name` to generate fully qualified type names. This ensures that types in the `main` package are given a unique, importable path, resolving the issue of rule duplication and lookup failures.
 
--   **[ ] 4.4: Final API Review and Testing**
+-   **[x] 4.4: Final API Review and Testing**
     -   [x] 4.4.1: Implement end-to-end tests for the `net/http` example.
     -   [ ] 4.4.2: Conduct a final review of all public APIs to ensure stability for the v1.0 release.
 

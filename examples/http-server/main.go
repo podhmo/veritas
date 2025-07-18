@@ -27,7 +27,20 @@ func main() {
 func run(ctx context.Context) error {
 	// setup validator
 	slog.InfoContext(ctx, "setup validator")
-	v, err := veritas.NewValidatorFromJSONFile("./rules.json")
+	v, err := veritas.NewValidatorFromJSONFile("./rules.json", veritas.WithTypeAdapters(
+		map[string]veritas.TypeAdapter{
+			"http-server.User": func(ob any) (map[string]any, error) {
+				v, ok := ob.(User)
+				if !ok {
+					return nil, errors.New("unexpected type")
+				}
+				return map[string]any{
+					"Name":  v.Name,
+					"Email": v.Email,
+				}, nil
+			},
+		},
+	))
 	if err != nil {
 		return err
 	}
@@ -48,7 +61,7 @@ func run(ctx context.Context) error {
 
 		// validate
 		slog.DebugContext(ctx, "validate request", "user", user)
-		if err := v.Validate(user); err != nil {
+		if err := v.Validate(ctx, user); err != nil {
 			slog.InfoContext(ctx, "validation failed", "err", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)

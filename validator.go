@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 
@@ -366,4 +367,41 @@ func (v *Validator) getGenericTypeName(baseName string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ValidatorOption is an option for NewValidatorFromJSONFile.
+type ValidatorOption func(*Validator)
+
+// WithTypeAdapters sets the type adapters for the validator.
+func WithTypeAdapters(adapters map[string]TypeAdapter) ValidatorOption {
+	return func(v *Validator) {
+		for k, adapter := range adapters {
+			v.adapters[k] = adapter
+		}
+	}
+}
+
+// NewValidatorFromJSONFile creates a new validator from a JSON file.
+func NewValidatorFromJSONFile(filePath string, options ...ValidatorOption) (*Validator, error) {
+	// todo: from option
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	engine, err := NewEngine(logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create engine: %w", err)
+	}
+	provider := NewJSONRuleProvider(filePath)
+
+	// For now, we don't have a good way to infer adapters from JSON.
+	// We'll need to think about how to handle this.
+	adapters := map[string]TypeAdapter{}
+
+	v, err := NewValidator(engine, provider, logger, adapters)
+	if err != nil {
+		return nil, err
+	}
+	for _, opt := range options {
+		opt(v)
+	}
+	return v, nil
 }
