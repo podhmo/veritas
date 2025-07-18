@@ -183,27 +183,44 @@ func (p *Parser) getEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (*ast.S
 
 
 func (p *Parser) processRules(rawRules []string, tv types.Type) ([]string, error) {
-	var rules []*Rule
-	var err error
+	var celRules []string
 	remaining := rawRules
 	for len(remaining) > 0 {
-		var rule *Rule
-		rule, remaining, err = p.parseRule(remaining, tv)
+		rule, nextRemaining, err := p.parseRule(remaining, tv)
 		if err != nil {
 			return nil, err
 		}
-		rules = append(rules, rule)
-	}
-
-	var celRules []string
-	for _, rule := range rules {
 		cel, err := rule.ToCEL()
 		if err != nil {
 			return nil, err
 		}
-		celRules = append(celRules, cel)
+		if cel != "" {
+			celRules = append(celRules, cel)
+		}
+		remaining = nextRemaining
 	}
-	return celRules, nil
+
+	// Post-process to join non-directive rules
+	var finalRules []string
+	var simpleConditions []string
+
+	for _, cel := range celRules {
+		// This is a heuristic: directives like `all()` are assumed to be standalone.
+		if strings.Contains(cel, ".all(") {
+			if len(simpleConditions) > 0 {
+				finalRules = append(finalRules, strings.Join(simpleConditions, " && "))
+				simpleConditions = nil
+			}
+			finalRules = append(finalRules, cel)
+		} else {
+			simpleConditions = append(simpleConditions, cel)
+		}
+	}
+	if len(simpleConditions) > 0 {
+		finalRules = append(finalRules, strings.Join(simpleConditions, " && "))
+	}
+
+	return finalRules, nil
 }
 
 type Rule struct {
@@ -307,11 +324,36 @@ func (p *Parser) parseRule(rawRules []string, tv types.Type) (*Rule, []string, e
 		rule.Nested = []*Rule{nested}
 		return rule, remaining, nil
 	default:
-		// Find end of shorthands
+		// Check if the first token starts a CEL expression.
+		if strings.HasPrefix(token, "cel:") {
+			// Find where the CEL expression ends. It might span multiple "tokens"
+			// if there are commas within the CEL expression itself.
+			// This is a simplification; a truly robust solution would need a more
+			// sophisticated parser. For now, we assume CEL expressions don't contain
+			// the 'dive', 'keys', or 'values' keywords and that they are the last rule.
+			var celExprBuilder strings.Builder
+			celExprBuilder.WriteString(strings.TrimPrefix(token, "cel:"))
+
+			remaining := rawRules[1:]
+			end := 0
+			for i, t := range remaining {
+				trimmed := strings.TrimSpace(t)
+				if trimmed == "dive" || trimmed == "keys" || trimmed == "values" {
+					break
+				}
+				celExprBuilder.WriteString(",")
+				celExprBuilder.WriteString(t)
+				end = i + 1
+			}
+			rule.SubRules = []string{"cel:" + celExprBuilder.String()}
+			return rule, remaining[end:], nil
+		}
+
+		// Find end of shorthands if not a CEL expression
 		end := 0
 		for i, t := range rawRules {
 			trimmed := strings.TrimSpace(t)
-			if trimmed == "dive" || trimmed == "keys" || trimmed == "values" {
+			if trimmed == "dive" || trimmed == "keys" || trimmed == "values" || strings.HasPrefix(trimmed, "cel:") {
 				break
 			}
 			end = i + 1
