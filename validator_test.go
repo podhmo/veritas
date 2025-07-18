@@ -167,7 +167,6 @@ func passwordAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
-
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	engine, err := NewEngine(logger, DefaultFunctions()...)

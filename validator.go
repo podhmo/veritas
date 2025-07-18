@@ -18,12 +18,12 @@ type TypeAdapter func(obj any) (map[string]any, error)
 
 // Validator performs validation on Go objects based on a set of rules.
 type Validator struct {
-	engine   *Engine
+	engine    *Engine
 	objectEnv *cel.Env // For object-level rules (e.g., self.field > 10)
 	fieldEnv  *cel.Env // For field-level rules (e.g., self.size() > 0)
-	rules    map[string]ValidationRuleSet
-	adapters map[string]TypeAdapter
-	logger   *slog.Logger
+	rules     map[string]ValidationRuleSet
+	adapters  map[string]TypeAdapter
+	logger    *slog.Logger
 }
 
 // NewValidator creates a new validator.
@@ -111,7 +111,6 @@ func (v *Validator) Validate(ctx context.Context, obj any) error {
 		}
 	}
 
-
 	if _, ok := v.adapters[typeName]; !ok {
 		// Fallback for anonymous structs or other edge cases.
 		if _, ok := v.adapters[originalTypeName]; !ok {
@@ -180,7 +179,6 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 	return elemInterface
 }
 
-
 // validateRecursive is the internal helper that performs the actual validation.
 func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[]error) {
 	// Check for context cancellation before proceeding.
@@ -222,7 +220,6 @@ func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[
 			typeName = typeSpecName
 		}
 	}
-
 
 	// Get the adapter for the current type. If none, we can't validate its fields with CEL.
 	adapter, hasAdapter := v.adapters[typeName]
