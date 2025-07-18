@@ -60,12 +60,13 @@ Running `veritas -in ./models -out rules.json` generates the following JSON:
 
 ### Consumer Code (`main.go`)
 
-The application must create a `JSONRuleProvider` by specifying the JSON file and pass it to the validator.
+The application can create a validator by specifying the JSON file provider.
 
 ```go
 package main
 
 import (
+    "context"
     "fmt"
     "log"
 
@@ -74,21 +75,15 @@ import (
 )
 
 func main() {
-    // 1. Create a rule provider from the JSON file
-    provider, err := veritas.NewJSONRuleProvider("rules.json")
-    if err != nil {
-        log.Fatalf("Failed to create rule provider: %v", err)
-    }
-
-    // 2. Initialize the validator by passing the provider
-    validator, err := veritas.NewValidator(provider)
+    // Initialize the validator by passing the provider
+    validator, err := veritas.NewValidatorFromJSONFile("rules.json")
     if err != nil {
         log.Fatalf("Failed to create validator: %v", err)
     }
 
-    // 3. Perform validation
+    // Perform validation
     user := models.User{ /* ... */ }
-    if err := validator.Validate(user); err != nil {
+    if err := validator.Validate(context.Background(), user); err != nil {
         fmt.Printf("Validation failed: %v\n", err)
     }
 }
@@ -152,6 +147,7 @@ Since the generated Go code has an `init()` function, rule registration is autom
 package main
 
 import (
+    "context"
     "fmt"
     "log"
 
@@ -170,7 +166,7 @@ func main() {
 
     // 2. Perform validation
     user := models.User{ /* ... */ }
-    if err := validator.Validate(user); err != nil {
+    if err := validator.Validate(context.Background(), user); err != nil {
         fmt.Printf("Validation failed: %v\n", err)
     }
 }

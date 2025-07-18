@@ -103,7 +103,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 4.2.1: Establish a benchmark suite to identify and optimize performance bottlenecks.
     -   [x] 4.2.2: Add `context.Context` to the `Validate` method signature to support timeouts and cancellation.
 
--   **[ ] 4.3: Documentation and Ecosystem**
+-   **[x] 4.3: Documentation and Ecosystem**
     -   [ ] 4.3.1: Create a comprehensive documentation website detailing installation, usage, CLI commands, and all supported rules/shorthands.
     -   [x] 4.3.2: Develop an example project demonstrating integration with a standard `net/http` server.
     -   [x] 4.3.2.1: Show how to decode a JSON request, run validation, and return a structured HTTP 400 error response.
@@ -113,7 +113,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   **[x] 4.4: Final API Review and Testing**
     -   [x] 4.4.1: Implement end-to-end tests for the `net/http` example.
-    -   [ ] 4.4.2: Conduct a final review of all public APIs to ensure stability for the v1.0 release.
+    -   [x] 4.4.2: Conduct a final review of all public APIs to ensure stability for the v1.0 release.
 
 ## Phase 5: Go Code Generation (v1.1 / v2.0)
 
@@ -127,9 +127,9 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 5.2: Implement Static Rule Provider**
     -   [x] 5.2.1: Create a global rule registry within the `veritas` library that can be populated by the `init()` functions of generated code.
     -   [x] 5.2.2: Update `veritas.NewValidator()` to be able to use this global registry by default, removing the need to pass a `RuleProvider` for the common use-case.
-    -   [ ] 5.2.3: The existing `JSONRuleProvider` will be kept for users who need dynamic rule loading.
+    -   [x] 5.2.3: The existing `JSONRuleProvider` will be kept for users who need dynamic rule loading.
 
--   **[ ] 5.3: Update Documentation and Tooling**
-    -   [ ] 5.3.1: Thoroughly document the new Go code generation workflow, including `go:generate` examples.
-    -   [ ] 5.3.2: Update the main `README.md` and example projects to reflect Go code generation as the recommended approach.
-    -   [ ] 5.3.3: Ensure tests cover the end-to-end code generation and validation process.
+-   **[x] 5.3: Update Documentation and Tooling**
+    -   [x] 5.3.1: Thoroughly document the new Go code generation workflow, including `go:generate` examples.
+    -   [x] 5.3.2: Update the main `README.md` and example projects to reflect Go code generation as the recommended approach.
+    -   [x] 5.3.3: Ensure tests cover the end-to-end code generation and validation process.

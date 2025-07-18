@@ -189,7 +189,12 @@ func TestValidator_Validate(t *testing.T) {
 	}
 
 	// Create a new validator with the adapters.
-	validator, err := NewValidator(engine, provider, logger, adapters)
+	validator, err := NewValidator(
+		WithEngine(engine),
+		WithRuleProvider(provider),
+		WithLogger(logger),
+		WithTypeAdapters(adapters),
+	)
 	if err != nil {
 		t.Fatalf("NewValidator() failed: %v", err)
 	}
@@ -562,7 +567,11 @@ func TestValidator_WithGlobalRegistry(t *testing.T) {
 	defer UnregisterAll() // Clean up the registry after the test.
 
 	// Create a new validator using the global registry (provider is nil).
-	validator, err := NewValidator(engine, nil, logger, adapters)
+	validator, err := NewValidator(
+		WithEngine(engine),
+		WithLogger(logger),
+		WithTypeAdapters(adapters),
+	)
 	if err != nil {
 		t.Fatalf("failed to create validator: %v", err)
 	}
@@ -597,7 +606,12 @@ func setupBenchmark(b *testing.B) (*Validator, *sources.MockUser, *sources.MockU
 		"sources.MockUser": mockUserAdapter,
 	}
 
-	validator, err := NewValidator(engine, provider, logger, adapters)
+	validator, err := NewValidator(
+		WithEngine(engine),
+		WithRuleProvider(provider),
+		WithLogger(logger),
+		WithTypeAdapters(adapters),
+	)
 	if err != nil {
 		b.Fatalf("NewValidator() failed: %v", err)
 	}
