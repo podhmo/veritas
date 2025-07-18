@@ -30,6 +30,9 @@ type Validator struct {
 // NewValidator creates a new validator.
 // It requires a map of type names to TypeAdapter functions to handle object-to-map conversion.
 func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, adapters map[string]TypeAdapter) (*Validator, error) {
+	if provider == nil {
+		provider = NewRuleProviderFromRegistry()
+	}
 	rules, err := provider.GetRuleSets()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rule sets: %w", err)

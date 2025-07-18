@@ -28,7 +28,7 @@ func TestRun(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// Execute the main logic.
-	if err := run(inPath, outFile, logger); err != nil {
+	if err := run(inPath, outFile, "json", logger); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestRun_mainPackage(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// Execute the main logic.
-	if err := run(inPath, outFile, logger); err != nil {
+	if err := run(inPath, outFile, "json", logger); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
 

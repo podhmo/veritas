@@ -528,6 +528,59 @@ func TestValidator_Validate(t *testing.T) {
 	}
 }
 
+func TestValidator_WithGlobalRegistry(t *testing.T) {
+	// A simple logger for testing.
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// Create a new engine.
+	engine, err := NewEngine(logger)
+	if err != nil {
+		t.Fatalf("failed to create engine: %v", err)
+	}
+
+	// Define a sample struct and its adapter.
+	type User struct {
+		Name  string
+		Email string
+	}
+	userAdapter := func(obj any) (map[string]any, error) {
+		u := obj.(User)
+		return map[string]any{
+			"Name":  u.Name,
+			"Email": u.Email,
+		}, nil
+	}
+	adapters := map[string]TypeAdapter{"veritas.User": userAdapter}
+
+	// Register a rule set in the global registry.
+	ruleSet := ValidationRuleSet{
+		FieldRules: map[string][]string{
+			"Name": {`self != ""`},
+		},
+	}
+	Register("veritas.User", ruleSet)
+	defer UnregisterAll() // Clean up the registry after the test.
+
+	// Create a new validator using the global registry (provider is nil).
+	validator, err := NewValidator(engine, nil, logger, adapters)
+	if err != nil {
+		t.Fatalf("failed to create validator: %v", err)
+	}
+
+	// Test case 1: Valid user
+	validUser := User{Name: "John Doe", Email: "john.doe@example.com"}
+	if err := validator.Validate(context.Background(), validUser); err != nil {
+		t.Errorf("Validate() with valid user failed: %v", err)
+	}
+
+	// Test case 2: Invalid user
+	invalidUser := User{Name: "", Email: "jane.doe@example.com"}
+	err = validator.Validate(context.Background(), invalidUser)
+	if err == nil {
+		t.Errorf("Validate() with invalid user should have failed, but got nil")
+	}
+}
+
 // setupBenchmark creates a standard validator setup for benchmarking.
 func setupBenchmark(b *testing.B) (*Validator, *sources.MockUser, *sources.MockUser) {
 	b.Helper()
