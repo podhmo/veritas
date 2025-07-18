@@ -57,3 +57,9 @@ type EmbeddedUser struct {
 	Base
 	Name string `validate:"required"`
 }
+
+type ComplexUser struct {
+	Name     string            `validate:"required"`
+	Scores   []int             `validate:"cel:self.all(x, x >= 0)"`
+	Metadata map[string]string `validate:"cel:self.keys().all(k, k != \"\") && self.values().all(v, v.size() >= 1)"`
+}

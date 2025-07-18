@@ -80,5 +80,19 @@
         "self.size() \u003e 0"
       ]
     }
+  },
+  "sources.ComplexUser": {
+    "typeRules": null,
+    "fieldRules": {
+      "Name": [
+        "self != \"\""
+      ],
+      "Scores": [
+        "self.all(x, x >= 0)"
+      ],
+      "Metadata": [
+        "self.keys().all(k, k != \"\") && self.values().all(v, v.size() >= 1)"
+      ]
+    }
   }
 }

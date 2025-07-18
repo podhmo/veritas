@@ -48,6 +48,37 @@ func embeddedUserAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
+func complexUserAdapter(obj any) (map[string]any, error) {
+	var user *sources.ComplexUser
+	switch v := obj.(type) {
+	case sources.ComplexUser:
+		user = &v
+	case *sources.ComplexUser:
+		user = v
+	default:
+		return nil, fmt.Errorf("unsupported type for ComplexUser adapter: %T", obj)
+	}
+
+	// For simplicity in testing, we'll manually convert the map.
+	// A real implementation might use reflection or other helpers.
+	metadata := make(map[string]any)
+	for k, v := range user.Metadata {
+		metadata[k] = v
+	}
+
+	// Also handle the slice.
+	scores := make([]any, len(user.Scores))
+	for i, s := range user.Scores {
+		scores[i] = s
+	}
+
+	return map[string]any{
+		"Name":     user.Name,
+		"Scores":   scores,
+		"Metadata": metadata,
+	}, nil
+}
+
 
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -62,6 +93,7 @@ func TestValidator_Validate(t *testing.T) {
 	adapters := map[string]TypeAdapter{
 		"sources.MockUser":     mockUserAdapter,
 		"sources.EmbeddedUser": embeddedUserAdapter,
+		"sources.ComplexUser":  complexUserAdapter,
 	}
 
 	// Create a new validator with the adapters.
@@ -147,6 +179,40 @@ func TestValidator_Validate(t *testing.T) {
 				Name: "", // Fails required check
 			},
 			wantErr: NewValidationError("sources.EmbeddedUser", "Name", `self != ""`),
+		},
+		{
+			name: "valid complex object",
+			obj: &sources.ComplexUser{
+				Name:   "ComplexGopher",
+				Scores: []int{10, 20, 0},
+				Metadata: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "complex object with invalid slice element",
+			obj: &sources.ComplexUser{
+				Name:   "ComplexGopher",
+				Scores: []int{10, -5, 0}, // -5 is invalid
+				Metadata: map[string]string{
+					"key1": "value1",
+				},
+			},
+			wantErr: NewValidationError("sources.ComplexUser", "Scores", `self.all(x, x >= 0)`),
+		},
+		{
+			name: "complex object with invalid map value",
+			obj: &sources.ComplexUser{
+				Name:   "ComplexGopher",
+				Scores: []int{10, 20, 0},
+				Metadata: map[string]string{
+					"key1": "", // invalid value
+				},
+			},
+			wantErr: NewValidationError("sources.ComplexUser", "Metadata", `self.keys().all(k, k != "") && self.values().all(v, v.size() >= 1)`),
 		},
 	}
 
