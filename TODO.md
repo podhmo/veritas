@@ -100,7 +100,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
         -   **Note**: The `Validator` now correctly handles pointer values within generic types (e.g., `Box[*string]`, `Box[*Item]`) by dereferencing them before evaluation. If the dereferenced value is a struct with a registered `TypeAdapter`, it's converted to a `map[string]any` to prevent `cel-go`'s `unsupported conversion` errors.
 
 -   **[ ] 4.2: Performance and Stabilization**
-    -   [ ] 4.2.1: Establish a benchmark suite to identify and optimize performance bottlenecks.
+    -   [x] 4.2.1: Establish a benchmark suite to identify and optimize performance bottlenecks.
     -   [x] 4.2.2: Add `context.Context` to the `Validate` method signature to support timeouts and cancellation.
 
 -   **[ ] 4.3: Documentation and Ecosystem**
