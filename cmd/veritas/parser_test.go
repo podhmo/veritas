@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/stretchr/testify/require"
-
 	"github.com/podhmo/veritas"
 )
 
@@ -29,7 +27,9 @@ func TestParser(t *testing.T) {
 		}
 
 		got, err := p.Parse("../../testdata/sources/user.go")
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatalf("Parse() error = %v, want nil", err)
+		}
 
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("Parse() mismatch (-want +got):\n%s", diff)
