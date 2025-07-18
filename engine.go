@@ -8,54 +8,42 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-// Engine is the core component that manages the CEL environment and program caching.
-// It is responsible for compiling and caching CEL expressions for efficient re-use.
+// Engine is the core component that manages base configurations and program caching.
+// It does not hold a CEL environment itself, but provides the base options to create them.
 type Engine struct {
-	env    *cel.Env
-	cache  *lru.Cache[string, cel.Program]
-	logger *slog.Logger
+	baseOpts     []cel.EnvOption
+	programCache *lru.Cache[string, cel.Program]
+	logger       *slog.Logger
 }
 
 // NewEngine creates a new validation engine.
-// It initializes the CEL environment and the LRU cache for compiled programs.
 func NewEngine(logger *slog.Logger, funcs ...cel.EnvOption) (*Engine, error) {
-	env, err := cel.NewEnv(funcs...)
-	if err != nil {
-		return nil, err
-	}
+	// Add support for common CEL features.
+	opts := append(funcs, cel.HomogeneousAggregateLiterals())
 
-	cache, err := lru.New[string, cel.Program](128) // Default cache size
+	cache, err := lru.New[string, cel.Program](256)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Engine{
-		env:    env,
-		cache:  cache,
-		logger: logger,
+		baseOpts:     opts,
+		programCache: cache,
+		logger:       logger,
 	}, nil
 }
 
-// getProgram compiles a CEL expression and returns a usable program.
+// getProgram compiles a CEL expression against a given environment and returns a usable program.
 // It uses an LRU cache to avoid re-compiling frequently used expressions.
-func (e *Engine) getProgram(rule string, vars ...cel.EnvOption) (cel.Program, error) {
-	// Note: Caching is tricky when variables can change.
-	// For this library's purpose, we assume the variable set for a given rule string is constant.
-	if prog, ok := e.cache.Get(rule); ok {
+// The cache key is just the rule string, implying that rules are environment-agnostic enough
+// for this library's use case, which might be a simplifying assumption.
+func (e *Engine) getProgram(env *cel.Env, rule string) (cel.Program, error) {
+	if prog, ok := e.programCache.Get(rule); ok {
 		e.logger.Debug("cache hit", "rule", rule)
 		return prog, nil
 	}
 
 	e.logger.Debug("cache miss", "rule", rule)
-
-	env := e.env
-	var err error
-	if len(vars) > 0 {
-		env, err = e.env.Extend(vars...)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	ast, issues := env.Compile(rule)
 	if issues != nil && issues.Err() != nil {
@@ -67,6 +55,6 @@ func (e *Engine) getProgram(rule string, vars ...cel.EnvOption) (cel.Program, er
 		return nil, err
 	}
 
-	e.cache.Add(rule, prog)
+	e.programCache.Add(rule, prog)
 	return prog, nil
 }
