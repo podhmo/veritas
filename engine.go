@@ -19,13 +19,42 @@ type Engine struct {
 // NewEngine creates a new validation engine.
 // It initializes the CEL environment and the LRU cache for compiled programs.
 func NewEngine(logger *slog.Logger, funcs ...cel.EnvOption) (*Engine, error) {
-	// TODO: Implementation
-	return nil, nil
+	env, err := cel.NewEnv(funcs...)
+	if err != nil {
+		return nil, err
+	}
+
+	cache, err := lru.New[string, cel.Program](128) // Default cache size
+	if err != nil {
+		return nil, err
+	}
+
+	return &Engine{
+		env:    env,
+		cache:  cache,
+		logger: logger,
+	}, nil
 }
 
 // getProgram compiles a CEL expression and returns a usable program.
 // It uses an LRU cache to avoid re-compiling frequently used expressions.
 func (e *Engine) getProgram(rule string) (cel.Program, error) {
-	// TODO: Implementation
-	return nil, nil
+	if prog, ok := e.cache.Get(rule); ok {
+		e.logger.Debug("cache hit", "rule", rule)
+		return prog, nil
+	}
+
+	e.logger.Debug("cache miss", "rule", rule)
+	ast, issues := e.env.Compile(rule)
+	if issues != nil && issues.Err() != nil {
+		return nil, issues.Err()
+	}
+
+	prog, err := e.env.Program(ast)
+	if err != nil {
+		return nil, err
+	}
+
+	e.cache.Add(rule, prog)
+	return prog, nil
 }
