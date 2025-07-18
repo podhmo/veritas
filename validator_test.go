@@ -1,42 +1,89 @@
 package veritas
 
 import (
+	"errors"
+	"log/slog"
+	"os"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-func TestValidator(t *testing.T) {
-	// Setup: Create a mock engine and rule provider for testing.
+// MockUser is a test struct.
+type MockUser struct {
+	Name  string
+	Email string
+	Age   int
+}
 
-	t.Run("valid object", func(t *testing.T) {
-		// Define a struct and a valid instance of it.
-		// Load a validator with rules that should pass.
-		// want := nil
-		// got := validator.Validate(ctx, validObject)
-		// if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
-		// 	 t.Errorf("Validate() mismatch (-want +got):\n%s", diff)
-		// }
-	})
+func TestValidator_Validate(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	engine, err := NewEngine(logger, DefaultFunctions()...)
+	if err != nil {
+		t.Fatalf("NewEngine() failed: %v", err)
+	}
 
-	t.Run("object with invalid field", func(t *testing.T) {
-		// Define a struct and an instance with one invalid field.
-		// Load a validator with a rule that should fail.
-		// want := ... // The expected single error.
-		// got := validator.Validate(ctx, invalidObject)
-		// if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
-		// 	 t.Errorf("Validate() mismatch (-want +got):\n%s", diff)
-		// }
-	})
+	provider := NewJSONRuleProvider("testdata/rules/user.json")
 
-	t.Run("object with multiple errors", func(t *testing.T) {
-		// Define a struct and an instance with multiple invalid fields and a type-level violation.
-		// Load a validator with rules that should fail.
-		// want := ... // The expected joined error.
-		// got := validator.Validate(ctx, invalidObject)
-		// Use a custom comparer for joined errors if necessary.
-		// if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
-		// 	 t.Errorf("Validate() mismatch (-want +got):\n%s", diff)
-		// }
-	})
+	validator, err := NewValidator(engine, provider, logger)
+	if err != nil {
+		t.Fatalf("NewValidator() failed: %v", err)
+	}
 
-	// TODO: Add tests for pointers, slices, and maps.
+	tests := []struct {
+		name    string
+		obj     any
+		wantErr error
+	}{
+		{
+			name: "valid object",
+			obj: &MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   10,
+			},
+			wantErr: nil,
+		},
+		{
+			name: "object with invalid field",
+			obj: &MockUser{
+				Name:  "Gopher",
+				Email: "invalid-email",
+				Age:   10,
+			},
+			wantErr: NewValidationError("MockUser", "Email", `this.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')`),
+		},
+		{
+			name: "object with multiple errors",
+			obj: &MockUser{
+				Name:  "",
+				Email: "invalid-email",
+				Age:   10,
+			},
+			wantErr: errors.Join(
+				NewValidationError("MockUser", "Name", "this.size() > 0"),
+				NewValidationError("MockUser", "Email", `this.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')`),
+			),
+		},
+		{
+			name: "object with type rule violation",
+			obj: &MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   99, // Fails the type-level rule "this.Age < 50"
+			},
+			wantErr: NewValidationError("MockUser", "", "this.Age < 50"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotErr := validator.Validate(tt.obj)
+
+			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("Validate() error mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }

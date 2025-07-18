@@ -1,27 +1,15 @@
 {
-  "user.User": {
+  "MockUser": {
     "typeRules": [
-      "self.Password == self.PasswordConfirm"
+      "this.Age < 50"
     ],
     "fieldRules": {
       "Name": [
-        "self != ''",
-        "self.size() < 50"
+        "this.size() > 0"
       ],
       "Email": [
-        "self != ''",
-        "self.matches('^[^@]+@[^@]+\\.[^@]+$')"
-      ],
-      "Age": [
-        "self >= 18"
-      ],
-      "Password": [
-        "self != ''",
-        "self.size() >= 10"
-      ],
-      "PasswordConfirm": [
-        "self != ''"
+        "this.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')"
       ]
     }
   }
-}````
+}
