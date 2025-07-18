@@ -16,6 +16,26 @@ type MockUser struct {
 	Age   int
 }
 
+// MockAddress is a nested struct.
+type MockAddress struct {
+	Street string
+	City   string
+}
+
+// MockProfile has a nested struct.
+type MockProfile struct {
+	Title   string
+	Address *MockAddress
+}
+
+// MockUserWithProfile contains a nested struct with validation rules.
+type MockUserWithProfile struct {
+	Name    string
+	Email   string
+	Age     int
+	Profile *MockProfile
+}
+
 // mockUserAdapter converts a MockUser object (or a pointer to it) to a map.
 func mockUserAdapter(obj any) (map[string]any, error) {
 	var user *MockUser
@@ -35,6 +55,59 @@ func mockUserAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
+// mockUserWithProfileAdapter converts a MockUserWithProfile to a map.
+func mockUserWithProfileAdapter(obj any) (map[string]any, error) {
+	var user *MockUserWithProfile
+	switch v := obj.(type) {
+	case MockUserWithProfile:
+		user = &v
+	case *MockUserWithProfile:
+		user = v
+	default:
+		return nil, fmt.Errorf("unsupported type for adapter: %T", obj)
+	}
+	return map[string]any{
+		"Name":    user.Name,
+		"Email":   user.Email,
+		"Age":     user.Age,
+		"Profile": user.Profile, // Keep the nested struct as is for now
+	}, nil
+}
+
+// mockProfileAdapter converts a MockProfile to a map.
+func mockProfileAdapter(obj any) (map[string]any, error) {
+	var p *MockProfile
+	switch v := obj.(type) {
+	case MockProfile:
+		p = &v
+	case *MockProfile:
+		p = v
+	default:
+		return nil, fmt.Errorf("unsupported type for adapter: %T", obj)
+	}
+	return map[string]any{
+		"Title":   p.Title,
+		"Address": p.Address,
+	}, nil
+}
+
+// mockAddressAdapter converts a MockAddress to a map.
+func mockAddressAdapter(obj any) (map[string]any, error) {
+	var a *MockAddress
+	switch v := obj.(type) {
+	case MockAddress:
+		a = &v
+	case *MockAddress:
+		a = v
+	default:
+		return nil, fmt.Errorf("unsupported type for adapter: %T", obj)
+	}
+	return map[string]any{
+		"Street": a.Street,
+		"City":   a.City,
+	}, nil
+}
+
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	engine, err := NewEngine(logger, DefaultFunctions()...)
@@ -46,7 +119,10 @@ func TestValidator_Validate(t *testing.T) {
 
 	// Define the adapters for the types we want to validate.
 	adapters := map[string]TypeAdapter{
-		"MockUser": mockUserAdapter,
+		"MockUser":              mockUserAdapter,
+		"MockUserWithProfile":   mockUserWithProfileAdapter,
+		"MockProfile":           mockProfileAdapter,
+		"MockAddress":           mockAddressAdapter,
 		// Adapter for the unregistered type test case.
 		"struct { Name string }": func(obj any) (map[string]any, error) {
 			return map[string]any{}, nil
@@ -106,6 +182,54 @@ func TestValidator_Validate(t *testing.T) {
 			name:    "unregistered type",
 			obj:     struct{ Age int }{10},
 			wantErr: NewFatalError("no TypeAdapter registered for type struct { Age int }"),
+		},
+		{
+			name: "valid nested struct",
+			obj: &MockUserWithProfile{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   10,
+				Profile: &MockProfile{
+					Title: "Engineer",
+					Address: &MockAddress{
+						Street: "123 Go Street",
+						City:   "Gopherville",
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "invalid nested struct field",
+			obj: &MockUserWithProfile{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   10,
+				Profile: &MockProfile{
+					Title: "", // Fails validation rule
+					Address: &MockAddress{
+						Street: "123 Go Street",
+						City:   "Gopherville",
+					},
+				},
+			},
+			wantErr: NewValidationError("MockProfile", "Title", "this.Title.size() > 0"),
+		},
+		{
+			name: "invalid deep nested struct field",
+			obj: &MockUserWithProfile{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   10,
+				Profile: &MockProfile{
+					Title: "Engineer",
+					Address: &MockAddress{
+						Street: "", // Fails validation rule
+						City:   "Gopherville",
+					},
+				},
+			},
+			wantErr: NewValidationError("MockAddress", "Street", "this.Street.size() > 0"),
 		},
 	}
 

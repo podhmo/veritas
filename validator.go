@@ -54,11 +54,22 @@ func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, ad
 	}, nil
 }
 
-// Validate applies the configured rules to the given object.
+// Validate applies the configured rules to the given object, including nested structs.
 func (v *Validator) Validate(obj any) error {
+	// Keep track of all errors found during validation.
+	var allErrors []error
+
+	// Top-level validation requires a registered TypeAdapter.
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil // Nothing to validate.
+		}
 		val = val.Elem()
+	}
+	// Ensure the top-level object is a struct.
+	if val.Kind() != reflect.Struct {
+		return nil // Or perhaps an error? For now, we only validate structs.
 	}
 	typ := val.Type()
 	typeName := typ.Name()
@@ -66,65 +77,105 @@ func (v *Validator) Validate(obj any) error {
 		typeName = typ.String()
 	}
 
-	// Find the adapter for the type.
-	adapter, ok := v.adapters[typeName]
-	if !ok {
-		// If no adapter is found, we cannot validate. This is a configuration error.
+	if _, ok := v.adapters[typeName]; !ok {
 		return NewFatalError(fmt.Sprintf("no TypeAdapter registered for type %s", typeName))
 	}
 
-	// Find the rule set for the type.
-	ruleSet, ok := v.rules[typeName]
-	if !ok {
-		// No rules for this type, so it's valid by default.
-		return nil
-	}
-
-	// Convert the object to a map using the adapter.
-	objMap, err := adapter(obj)
-	if err != nil {
-		v.logger.Error("failed to adapt object", "type", typeName, "error", err)
-		return NewFatalError(fmt.Sprintf("TypeAdapter error for %s: %s", typeName, err))
-	}
-
-	var allErrors []error
-	vars := map[string]any{"this": objMap}
-
-	evaluate := func(rule, fieldName string) error {
-		prog, err := v.engine.getProgram(v.env, rule)
-		if err != nil {
-			v.logger.Error("failed to compile rule", "rule", rule, "type", typeName, "error", err)
-			return NewFatalError(fmt.Sprintf("rule compilation error for %s: %s", typeName, err))
-		}
-
-		out, _, err := prog.Eval(vars)
-		if err != nil {
-			v.logger.Error("failed to evaluate rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-			return NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err))
-		}
-
-		if valid, ok := out.Value().(bool); !ok || !valid {
-			return NewValidationError(typeName, fieldName, rule)
-		}
-		return nil
-	}
-
-	for _, rule := range ruleSet.TypeRules {
-		if err := evaluate(rule, ""); err != nil {
-			allErrors = append(allErrors, err)
-		}
-	}
-
-	for fieldName, rules := range ruleSet.FieldRules {
-		for _, rule := range rules {
-			if err := evaluate(rule, fieldName); err != nil {
-				allErrors = append(allErrors, err)
-			}
-		}
-	}
+	// Use a helper function to perform the validation recursively.
+	v.validateRecursive(obj, &allErrors)
 
 	if len(allErrors) > 0 {
 		return errors.Join(allErrors...)
 	}
 	return nil
+}
+
+// validateRecursive is the internal helper that performs the actual validation.
+func (v *Validator) validateRecursive(obj any, allErrors *[]error) {
+	// Dereference pointer to get the actual value.
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return // Skip validation for nil pointers.
+		}
+		val = val.Elem()
+	}
+
+	// We only validate structs.
+	if val.Kind() != reflect.Struct {
+		return
+	}
+	typ := val.Type()
+	typeName := typ.Name()
+	if typeName == "" {
+		typeName = typ.String() // Handle anonymous structs
+	}
+
+	// Get the adapter for the current type. If none, we can't validate its fields with CEL.
+	adapter, hasAdapter := v.adapters[typeName]
+	if !hasAdapter {
+		// Even without an adapter, we must still recurse into its fields.
+		v.logger.Debug("no TypeAdapter, but continuing to recurse", "type", typeName)
+	}
+
+	// Get the rule set. If none, we might still need to recurse.
+	ruleSet, hasRules := v.rules[typeName]
+
+	// If there are rules and an adapter, perform CEL validation.
+	if hasRules && hasAdapter {
+		// Convert the object to a map for CEL evaluation.
+		objMap, err := adapter(obj)
+		if err != nil {
+			v.logger.Error("failed to adapt object", "type", typeName, "error", err)
+			*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("TypeAdapter error for %s: %v", typeName, err)))
+			return // Stop validation for this object if adapter fails.
+		}
+		vars := map[string]any{"this": objMap}
+
+		// Evaluation helper function.
+		evaluate := func(rule, fieldName string) {
+			prog, err := v.engine.getProgram(v.env, rule)
+			if err != nil {
+				v.logger.Error("failed to compile rule", "rule", rule, "type", typeName, "error", err)
+				*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("rule compilation error for %s: %s", typeName, err)))
+				return
+			}
+
+			out, _, err := prog.Eval(vars)
+			if err != nil {
+				v.logger.Error("failed to evaluate rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
+				*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err)))
+				return
+			}
+
+			if valid, ok := out.Value().(bool); !ok || !valid {
+				*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, rule))
+			}
+		}
+
+		// Apply type and field rules.
+		for _, rule := range ruleSet.TypeRules {
+			evaluate(rule, "")
+		}
+		for fieldName, rules := range ruleSet.FieldRules {
+			for _, rule := range rules {
+				evaluate(rule, fieldName)
+			}
+		}
+	}
+
+	// --- Recursive Validation Step ---
+	// Iterate over the fields of the struct to find nested structs to validate.
+	for i := 0; i < val.NumField(); i++ {
+		fieldVal := val.Field(i)
+
+		// We need to check if the field is a struct or a pointer to a struct.
+		kind := fieldVal.Kind()
+		if kind == reflect.Struct || (kind == reflect.Ptr && fieldVal.Type().Elem().Kind() == reflect.Struct) {
+			// Ensure we can get an interface to the field to pass to the recursive call.
+			if fieldVal.CanInterface() {
+				v.validateRecursive(fieldVal.Interface(), allErrors)
+			}
+		}
+	}
 }
