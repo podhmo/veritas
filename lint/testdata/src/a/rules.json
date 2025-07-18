@@ -1,0 +1,19 @@
+{
+  "User": {
+    "fieldRules": {
+      "Name": [
+        "size(self) > 0"
+      ],
+      "Email": [
+        "self.matches('^[^@]+@[^@]+\\.[^@]+$')"
+      ],
+      "NonExistentField": [
+        "self > 0"
+      ]
+    },
+    "typeRules": [
+      "self.Name != self.Email",
+      "invalid cel syntax"
+    ]
+  }
+}
