@@ -11,5 +11,16 @@
         "this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')"
       ]
     }
+  },
+  "MockProfile": {
+    "FieldRules": {
+      "Title": ["this.Title.size() > 0"]
+    }
+  },
+  "MockAddress": {
+    "FieldRules": {
+      "Street": ["this.Street.size() > 0"],
+      "City": ["this.City.size() > 0"]
+    }
   }
 }

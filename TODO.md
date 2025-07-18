@@ -51,8 +51,8 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Enhance the library to handle complex data structures common in modern Go applications.
 
--   **[ ] 3.1: Pointer and Nested Struct Handling**
-    -   [ ] 3.1.1: Implement recursive validation for nested structs.
+-   **[x] 3.1: Pointer and Nested Struct Handling**
+    -   [x] 3.1.1: Implement recursive validation for nested structs.
     -   [x] 3.1.2: Implement logic to safely dereference and validate pointer fields (achieved by generating `!= nil` checks from `required` tag).
 
 -   **[ ] 3.2: Slice (`[]T`) Support**
