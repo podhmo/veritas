@@ -1,26 +1,84 @@
 {
-  "MockUser": {
-    "typeRules": [
-      "this.Age < 50"
-    ],
+  "sources.Base": {
+    "typeRules": null,
     "fieldRules": {
-      "Name": [
-        "this.Name.size() > 0"
-      ],
-      "Email": [
-        "this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')"
+      "ID": [
+        "self != \"\" \u0026\u0026 self.size() \u003e 1"
       ]
     }
   },
-  "MockProfile": {
-    "FieldRules": {
-      "Title": ["this.Title.size() > 0"]
+  "sources.EmbeddedUser": {
+    "typeRules": null,
+    "fieldRules": {
+      "ID": [
+        "self != \"\" \u0026\u0026 self.size() \u003e 1"
+      ],
+      "Name": [
+        "self != \"\""
+      ]
     }
   },
-  "MockAddress": {
-    "FieldRules": {
-      "Street": ["this.Street.size() > 0"],
-      "City": ["this.City.size() > 0"]
+  "sources.MockComplexData": {
+    "typeRules": null,
+    "fieldRules": {
+      "Matrix": [
+        "self.all(x, x.all(x, x != 0))"
+      ],
+      "ResourceMap": [
+        "self.all(k, k.startsWith('id_'))",
+        "self.all(v, v != null)"
+      ],
+      "UserEmails": [
+        "self.all(x, x.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$'))"
+      ],
+      "Users": [
+        "self.all(x, x != null)"
+      ]
+    }
+  },
+  "sources.MockMoreComplexData": {
+    "typeRules": null,
+    "fieldRules": {
+      "ListOfMaps": [
+        "self.all(x, x.size() \u003e 0 \u0026\u0026 x.all(k, k.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')) \u0026\u0026 x.all(v, v != \"\"))"
+      ],
+      "MapOfSlices": [
+        "self.all(k, k != \"\")",
+        "self.all(v, v.all(x, x != \"\"))"
+      ]
+    }
+  },
+  "sources.MockUser": {
+    "typeRules": [
+      "self.Age \u003e= 18"
+    ],
+    "fieldRules": {
+      "Email": [
+        "self != \"\" \u0026\u0026 self.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
+      ],
+      "ID": [
+        "self != null"
+      ],
+      "Name": [
+        "self != \"\""
+      ]
+    }
+  },
+  "sources.MockVariety": {
+    "typeRules": null,
+    "fieldRules": {
+      "Count": [
+        "self != 0"
+      ],
+      "IsActive": [
+        "self"
+      ],
+      "Metadata": [
+        "self.size() \u003e 0"
+      ],
+      "Scores": [
+        "self.size() \u003e 0"
+      ]
     }
   }
 }

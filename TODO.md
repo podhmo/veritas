@@ -66,6 +66,10 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 3.4: Advanced Structure Testing**
     -   [x] 3.4.1: Expand the test suite to include complex structs with slices, maps, and nested pointers.
 
+-   **[x] 3.5: Embedded Struct Support**
+    -   [x] 3.5.1: Update parser to correctly handle embedded structs, inheriting validation rules from the embedded type.
+    -   [x] 3.5.2: Ensure validator can correctly validate fields within embedded structs.
+
 ## Phase 4: General Availability (GA) Finalization (v1.0)
 
 **Goal**: Support modern Go features, create comprehensive documentation, and polish the library for its official v1.0 release.
