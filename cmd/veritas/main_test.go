@@ -75,6 +75,17 @@ func TestRun(t *testing.T) {
 				"Matrix": {`self.all(x, x.all(x, x != 0))`},
 			},
 		},
+		"sources.MockMoreComplexData": {
+			FieldRules: map[string][]string{
+				"ListOfMaps": {
+					`self.all(x, x != nil && x.all(k, k.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')) && x.all(v, v != ""))`,
+				},
+				"MapOfSlices": {
+					`self.all(k, k != "")`,
+					`self.all(v, v.all(x, x != ""))`,
+				},
+			},
+		},
 	}
 
 	if diff := cmp.Diff(want, got); diff != "" {

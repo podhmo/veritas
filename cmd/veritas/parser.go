@@ -99,7 +99,11 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 						}
 
 						rawRules := strings.Split(validateTag, ",")
-						celRules := p.processRules(rawRules, tv)
+						celRules, err := p.processRules(rawRules, tv)
+						if err != nil {
+							p.logger.Warn("error processing rules", "field", fieldName, "error", err)
+							continue
+						}
 						if len(celRules) > 0 {
 							ruleSet.FieldRules[fieldName] = celRules
 						}
@@ -118,89 +122,142 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 	return ruleSets, nil
 }
 
-func (p *Parser) processRules(rawRules []string, tv types.Type) []string {
+func (p *Parser) processRules(rawRules []string, tv types.Type) ([]string, error) {
+	var rules []*Rule
+	var err error
+	remaining := rawRules
+	for len(remaining) > 0 {
+		var rule *Rule
+		rule, remaining, err = p.parseRule(remaining, tv)
+		if err != nil {
+			return nil, err
+		}
+		rules = append(rules, rule)
+	}
+
 	var celRules []string
-	groups := p.splitRuleGroups(rawRules)
-	for _, group := range groups {
-		cel, err := p.parseRuleGroup(group, tv, "self")
+	for _, rule := range rules {
+		cel, err := rule.ToCEL()
 		if err != nil {
-			p.logger.Warn("failed to parse rule group", "group", group, "error", err)
-			continue
+			return nil, err
 		}
-		if cel != "" {
-			celRules = append(celRules, cel)
-		}
+		celRules = append(celRules, cel)
 	}
-	return celRules
+	return celRules, nil
 }
 
-func (p *Parser) splitRuleGroups(rawRules []string) [][]string {
-	var groups [][]string
-	currentGroup := []string{}
-	for _, r := range rawRules {
-		trimmed := strings.TrimSpace(r)
-		if (trimmed == "keys" || trimmed == "values") && len(currentGroup) > 0 {
-			groups = append(groups, currentGroup)
-			currentGroup = []string{}
-		}
-		currentGroup = append(currentGroup, trimmed)
-	}
-	if len(currentGroup) > 0 {
-		groups = append(groups, currentGroup)
-	}
-	return groups
+type Rule struct {
+	TV        types.Type
+	BaseVar   string
+	Directive string
+	SubRules  []string
+	Nested    []*Rule
+	parser    *Parser
 }
 
-func (p *Parser) parseRuleGroup(group []string, tv types.Type, baseVar string) (string, error) {
-	if len(group) == 0 {
-		return "", nil
-	}
-
-	token := group[0]
-	switch token {
-	case "dive":
-		slice, ok := tv.Underlying().(*types.Slice)
-		if !ok {
-			return "", fmt.Errorf("'dive' is only applicable to slices, but got %s", tv.String())
-		}
-		subCEL, err := p.parseRuleGroup(group[1:], slice.Elem(), "x")
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s.all(x, %s)", baseVar, subCEL), nil
-	case "keys":
-		m, ok := tv.Underlying().(*types.Map)
-		if !ok {
-			return "", fmt.Errorf("'keys' is only applicable to maps, but got %s", tv.String())
-		}
-		subCEL, err := p.parseRuleGroup(group[1:], m.Key(), "k")
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s.all(k, %s)", baseVar, subCEL), nil
-	case "values":
-		m, ok := tv.Underlying().(*types.Map)
-		if !ok {
-			return "", fmt.Errorf("'values' is only applicable to maps, but got %s", tv.String())
-		}
-		subCEL, err := p.parseRuleGroup(group[1:], m.Elem(), "v")
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s.all(v, %s)", baseVar, subCEL), nil
-	default:
-		// Base case: list of shorthands
+func (r *Rule) ToCEL() (string, error) {
+	if r.Directive == "" {
 		var conditions []string
-		for _, shorthand := range group {
+		for _, shorthand := range r.SubRules {
 			if shorthand == "" {
 				continue
 			}
-			cel := p.shorthandToCEL(shorthand, tv, baseVar)
+			cel := r.parser.shorthandToCEL(shorthand, r.TV, r.BaseVar)
 			if cel != "" {
 				conditions = append(conditions, cel)
 			}
 		}
 		return strings.Join(conditions, " && "), nil
+	}
+
+	var varName string
+	switch r.Directive {
+	case "dive":
+		varName = "x"
+	case "keys":
+		varName = "k"
+	case "values":
+		varName = "v"
+	}
+
+	var nestedCELs []string
+	for _, nestedRule := range r.Nested {
+		nestedRule.BaseVar = varName
+		cel, err := nestedRule.ToCEL()
+		if err != nil {
+			return "", err
+		}
+		nestedCELs = append(nestedCELs, cel)
+	}
+
+	return fmt.Sprintf("%s.all(%s, %s)", r.BaseVar, varName, strings.Join(nestedCELs, " && ")), nil
+}
+
+func (p *Parser) parseRule(rawRules []string, tv types.Type) (*Rule, []string, error) {
+	if len(rawRules) == 0 {
+		return nil, nil, nil
+	}
+	token := strings.TrimSpace(rawRules[0])
+
+	rule := &Rule{TV: tv, BaseVar: "self", parser: p}
+
+	switch token {
+	case "dive":
+		slice, ok := tv.Underlying().(*types.Slice)
+		if !ok {
+			return nil, nil, fmt.Errorf("'dive' on non-slice type: %s", tv.String())
+		}
+		rule.Directive = "dive"
+
+		var nestedRules []*Rule
+		remaining := rawRules[1:]
+		for len(remaining) > 0 {
+			var nested *Rule
+			var err error
+			nested, remaining, err = p.parseRule(remaining, slice.Elem())
+			if err != nil {
+				return nil, nil, err
+			}
+			nestedRules = append(nestedRules, nested)
+		}
+		rule.Nested = nestedRules
+		return rule, remaining, nil
+	case "keys":
+		m, ok := tv.Underlying().(*types.Map)
+		if !ok {
+			return nil, nil, fmt.Errorf("'keys' on non-map type: %s", tv.String())
+		}
+		rule.Directive = "keys"
+		nested, remaining, err := p.parseRule(rawRules[1:], m.Key())
+		if err != nil {
+			return nil, nil, err
+		}
+		rule.Nested = []*Rule{nested}
+		return rule, remaining, nil
+	case "values":
+		m, ok := tv.Underlying().(*types.Map)
+		if !ok {
+			return nil, nil, fmt.Errorf("'values' on non-map type: %s", tv.String())
+		}
+		rule.Directive = "values"
+		nested, remaining, err := p.parseRule(rawRules[1:], m.Elem())
+		if err != nil {
+			return nil, nil, err
+		}
+		rule.Nested = []*Rule{nested}
+		return rule, remaining, nil
+	default:
+		// Find end of shorthands
+		end := 0
+		for i, t := range rawRules {
+			trimmed := strings.TrimSpace(t)
+			if trimmed == "dive" || trimmed == "keys" || trimmed == "values" {
+				break
+			}
+			end = i + 1
+		}
+		rule.SubRules = rawRules[:end]
+		return rule, rawRules[end:], nil
 	}
 }
 
