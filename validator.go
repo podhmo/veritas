@@ -10,28 +10,53 @@ import (
 )
 
 // Validator performs validation on Go objects based on a set of rules.
+// It holds a CEL environment configured for the specific types it validates.
 type Validator struct {
-	engine    *Engine
-	rules     map[string]ValidationRuleSet
-	logger    *slog.Logger
+	engine *Engine
+	env    *cel.Env // Validator-specific environment, created fresh.
+	rules  map[string]ValidationRuleSet
+	logger *slog.Logger
 }
 
-// NewValidator creates a new validator with the given engine and rule provider.
-func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger) (*Validator, error) {
+// NewValidator creates a new validator.
+// It creates a new CEL environment specifically for the types it needs to validate.
+func NewValidator(engine *Engine, provider RuleProvider, logger *slog.Logger, typesToRegister ...any) (*Validator, error) {
 	rules, err := provider.GetRuleSets()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rule sets: %w", err)
 	}
 
+	// Start with the base options from the engine.
+	opts := make([]cel.EnvOption, len(engine.baseOpts))
+	copy(opts, engine.baseOpts)
+
+	// Add type registrations for the validator.
+	for _, t := range typesToRegister {
+		val := reflect.ValueOf(t)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+		// This is the critical part: cel.Types() is now used with cel.NewEnv, not env.Extend.
+		opts = append(opts, cel.Types(val.Interface()))
+	}
+	// Declare 'this' as a variable that can hold the object under validation.
+	opts = append(opts, cel.Variable("this", cel.DynType))
+
+	// Create a new environment from scratch with all options.
+	env, err := cel.NewEnv(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
+	}
+
 	return &Validator{
-		engine:    engine,
-		rules:     rules,
-		logger:    logger,
+		engine: engine,
+		env:    env,
+		rules:  rules,
+		logger: logger,
 	}, nil
 }
 
 // Validate applies the configured rules to the given object.
-// It returns a joined error containing all validation failures.
 func (v *Validator) Validate(obj any) error {
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
@@ -42,27 +67,40 @@ func (v *Validator) Validate(obj any) error {
 
 	ruleSet, ok := v.rules[typeName]
 	if !ok {
-		// No rules for this type, so it's valid by default.
 		return nil
 	}
 
 	var allErrors []error
 	vars := map[string]any{"this": obj}
 
-	// 1. Type-level validation
-	for _, rule := range ruleSet.TypeRules {
-		// For type rules, the fieldName is empty.
-		err := v.evaluateRule(rule, obj, vars, typeName, "")
+	evaluate := func(rule, fieldName string) error {
+		prog, err := v.engine.getProgram(v.env, rule)
 		if err != nil {
+			v.logger.Error("failed to compile rule", "rule", rule, "type", typeName, "error", err)
+			return NewFatalError(fmt.Sprintf("rule compilation error for %s: %s", typeName, err))
+		}
+
+		out, _, err := prog.Eval(vars)
+		if err != nil {
+			v.logger.Error("failed to evaluate rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
+			return NewValidationError(typeName, fieldName, "evaluation error")
+		}
+
+		if valid, ok := out.Value().(bool); !ok || !valid {
+			return NewValidationError(typeName, fieldName, rule)
+		}
+		return nil
+	}
+
+	for _, rule := range ruleSet.TypeRules {
+		if err := evaluate(rule, ""); err != nil {
 			allErrors = append(allErrors, err)
 		}
 	}
 
-	// 2. Field-level validation
 	for fieldName, rules := range ruleSet.FieldRules {
 		for _, rule := range rules {
-			err := v.evaluateRule(rule, obj, vars, typeName, fieldName)
-			if err != nil {
+			if err := evaluate(rule, fieldName); err != nil {
 				allErrors = append(allErrors, err)
 			}
 		}
@@ -71,34 +109,5 @@ func (v *Validator) Validate(obj any) error {
 	if len(allErrors) > 0 {
 		return errors.Join(allErrors...)
 	}
-
-	return nil
-}
-
-// evaluateRule compiles (with caching) and runs a single CEL rule.
-func (v *Validator) evaluateRule(rule string, obj any, vars map[string]any, typeName, fieldName string) error {
-	// Dynamically register the type of the object for this evaluation.
-	// This makes the validator flexible to any type without pre-registration.
-	opts := []cel.EnvOption{
-		cel.Types(obj),
-		cel.Variable("this", cel.ObjectType(typeName)),
-	}
-
-	prog, err := v.engine.getProgram(rule, opts...)
-	if err != nil {
-		v.logger.Error("failed to compile rule", "rule", rule, "error", err)
-		return NewFatalError(fmt.Sprintf("rule compilation error for %s: %s", typeName, err))
-	}
-
-	out, _, err := prog.Eval(vars)
-	if err != nil {
-		v.logger.Error("failed to evaluate rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-		return NewValidationError(typeName, fieldName, "evaluation error")
-	}
-
-	if valid, ok := out.Value().(bool); !ok || !valid {
-		return NewValidationError(typeName, fieldName, rule)
-	}
-
 	return nil
 }
