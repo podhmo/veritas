@@ -58,10 +58,12 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 3.2: Slice (`[]T`) Support**
     -   [x] 3.2.1: Support a `dive` keyword in the `validate` tag to apply rules to each element of a slice.
     -   [ ] 3.2.2: Include the array index in error messages (e.g., `User.Scores[2]: is invalid`).
+    -   **Note**: An attempt was made to implement this. The current architecture, where the parser generates a `cel.all()` macro for the entire slice, prevents the validator from identifying the specific index of the failing element. A significant refactor is needed. The parser should likely pass element-level rules to the validator, which would then be responsible for iterating and validating each element individually to provide contextual errors.
 
 -   **[x] 3.3: Map (`map[K]V`) Support**
     -   [x] 3.3.1: Support `keys` and `values` keywords to apply rules to a map's keys and values, respectively.
     -   [ ] 3.3.2: Include the map key in error messages (e.g., `User.Metadata['user_id']: is invalid`).
+    -   **Note**: This faces the same architectural challenge as slice index reporting. The `cel.all()` macro abstracts away the individual key that caused the failure.
 
 -   **[x] 3.4: Advanced Structure Testing**
     -   [x] 3.4.1: Expand the test suite to include complex structs with slices, maps, and nested pointers.
