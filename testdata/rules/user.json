@@ -5,10 +5,10 @@
     ],
     "fieldRules": {
       "Name": [
-        "this.size() > 0"
+        "this.Name.size() > 0"
       ],
       "Email": [
-        "this.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')"
+        "this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')"
       ]
     }
   }

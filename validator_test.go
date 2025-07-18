@@ -62,8 +62,8 @@ func TestValidator_Validate(t *testing.T) {
 				Age:   10,
 			},
 			wantErr: errors.Join(
-				NewValidationError("MockUser", "Name", "this.size() > 0"),
-				NewValidationError("MockUser", "Email", `this.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')`),
+				NewValidationError("MockUser", "Name", "this.Name.size() > 0"),
+				NewValidationError("MockUser", "Email", `this.Email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$')`),
 			),
 		},
 		{
