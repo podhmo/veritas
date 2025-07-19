@@ -136,3 +136,11 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   **[x] 5.4: Use singlegenerator for code generation**
     -   [x] 5.4.1: Refactor the code generation to use `singlegenerator`.
     -   [x] 5.4.2: Add tests for the new code generation implementation.
+
+## Phase 6: Additional Tasks
+
+- [x] Embed `rules.json` in `main.go`
+- [x] Update `run` function to use embedded data
+- [x] Format the code
+- [x] Run tests
+- [x] Update `TODO.md`

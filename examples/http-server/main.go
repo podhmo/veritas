@@ -1,6 +1,8 @@
 package main
 
 import (
+	_ "embed"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +12,9 @@ import (
 
 	"github.com/podhmo/veritas"
 )
+
+//go:embed rules.json
+var rulesJSON []byte
 
 type User struct {
 	Name  string `json:"name"`
@@ -27,7 +32,8 @@ func main() {
 func run(ctx context.Context) error {
 	// setup validator
 	slog.InfoContext(ctx, "setup validator")
-	v, err := veritas.NewValidatorFromJSONFile("./rules.json", veritas.WithTypeAdapters(
+	provider := veritas.NewBytesRuleProvider(rulesJSON)
+	v, err := veritas.NewValidator(veritas.WithRuleProvider(provider), veritas.WithTypeAdapters(
 		map[string]veritas.TypeAdapter{
 			"http-server.User": func(ob any) (map[string]any, error) {
 				v, ok := ob.(User)
