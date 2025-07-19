@@ -2,28 +2,20 @@
 
 Veritas is a dynamic, type-safe, and extensible validation library for Go, powered by Google's Common Expression Language (CEL).
 
-It aims to provide a robust validation framework where rules are derived directly from your Go source code as the "Single Source of Truth." This is achieved by a companion CLI tool that performs static analysis on your code, extracting rules from struct tags and special comments.
-
-## Key Features
+## Features
 
 - **Declarative Rules in Go Code**: Define validation rules directly in your structs using tags (`validate:"..."`) and special comments (`// @cel:`).
-- **Static Analysis**: A CLI tool (`veritas`) scans your code and generates a JSON representation of your validation rules, ensuring rules and code are always in sync.
-- **Dynamic Execution**: The library loads the generated JSON rules at runtime to perform validation, powered by the high-performance `cel-go` engine.
+- **Two Modes of Operation**:
+    - **Code Generation**: A CLI tool (`veritas`) scans your code and generates a Go file with your validation rules, ensuring that your rules and code are always in sync. This is the recommended approach for most use cases.
+    - **JSON-based Rules**: The library can also load rules from a JSON file at runtime, which is useful for dynamic environments.
+- **Powered by CEL**: Veritas uses Google's Common Expression Language (CEL) for high-performance, dynamic validation.
 - **Extensible**: Add your own custom validation functions to the CEL environment.
 - **Type-Safe**: Designed to handle complex, nested data structures, including pointers, slices, and maps, with type-safety in mind.
-- **Modern Go**: Built with Go 1.24, `log/slog` for structured logging, and `go-cmp` for testing.
+- **Modern Go**: Built with Go 1.24 and `log/slog` for structured logging.
 
-## Project Name
+## Getting Started
 
-The name "Veritas" is Latin for "truth." It was chosen to symbolize the library's core function: to verify the "truthfulness" or correctness of data against a defined set of rules.
-
-## Installation
-
-```bash
-go get github.com/podhmo/veritas
-```
-
-## Quick Start
+### Option 1: Using Go Generate (Recommended)
 
 The recommended approach is to use Go code generation for a type-safe, high-performance validation experience.
 
@@ -99,4 +91,100 @@ The recommended approach is to use Go code generation for a type-safe, high-perf
     }
     ```
 
-For more advanced use cases, such as loading rules from JSON files for dynamic environments, please refer to the documentation in the `docs` directory.
+### Option 2: Using JSON Rules
+
+For more dynamic environments, you can load validation rules from a JSON file.
+
+1.  **Define your rules in a JSON file:**
+
+    Create a `rules.json` file that defines the validation rules for your types. The key is the type name (e.g., `main.User`), and the value contains the validation rules.
+
+    ```json
+    // file: rules.json
+    {
+      "main.User": {
+        "fieldRules": {
+          "Name": [
+            "size(self) > 0"
+          ],
+          "Email": [
+            "self.contains('@')"
+          ]
+        }
+      }
+    }
+    ```
+
+2.  **Load the rules and use the validator:**
+
+    In your application, use `veritas.NewValidatorFromJSONFile()` to create a validator from your JSON file. You'll also need to provide a `TypeAdapter` to convert your Go types into a map that the validator can understand.
+
+    ```go
+    // file: main.go
+    package main
+
+    import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+
+	"github.com/podhmo/veritas"
+    )
+
+    type User struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+    }
+
+    func main() {
+        // setup validator
+        v, err := veritas.NewValidatorFromJSONFile("./rules.json", veritas.WithTypeAdapters(
+            map[string]veritas.TypeAdapter{
+                "main.User": func(ob any) (map[string]any, error) {
+                    v, ok := ob.(User)
+                    if !ok {
+                        return nil, errors.New("unexpected type")
+                    }
+                    return map[string]any{
+                        "Name":  v.Name,
+                        "Email": v.Email,
+                    }, nil
+                },
+            },
+        ))
+        if err != nil {
+            log.Fatalf("Failed to create validator: %v", err)
+        }
+
+        // ... (rest of the http server example)
+    }
+    ```
+
+## Documentation
+
+For more detailed information, please see the [documentation website](docs/website/index.md).
+
+## Contributing
+
+We welcome contributions! Please follow these steps to contribute:
+
+1.  **Fork the repository.**
+2.  **Create a new branch.**
+3.  **Make your changes.**
+4.  **Format your code:**
+    ```bash
+    goimports -w ./...
+    ```
+5.  **Run the tests:**
+    ```bash
+    go test ./...
+    go test -C ./examples/http-server ./...
+    ```
+6.  **Submit a pull request.**
+
+## Project Name
+
+The name "Veritas" is Latin for "truth." It was chosen to symbolize the library's core function: to verify the "truthfulness" or correctness of data against a defined set of rules.
