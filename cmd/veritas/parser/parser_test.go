@@ -22,10 +22,19 @@ func TestParser(t *testing.T) {
 					"ID": {`self != "" && self.size() > 1`},
 				},
 			},
-			pkgPrefix + "Box[T]": {
-				TypeRules: []string{"self.Value != null"},
+			pkgPrefix + "Box": {
+				GenericTypeName: "Box[T]",
+				TypeRules:       []string{"self.Value != null"},
 				FieldRules: map[string][]string{
 					"Value": {`self != null`},
+				},
+			},
+			pkgPrefix + "Pair": {
+				GenericTypeName: "Pair[K, V]",
+				TypeRules:       []string{"self.First != null && self.Second != null"},
+				FieldRules: map[string][]string{
+					"First":  {`self != null`},
+					"Second": {`self != null`},
 				},
 			},
 			pkgPrefix + "ComplexUser": {

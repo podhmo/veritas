@@ -19,12 +19,13 @@ type TypeAdapter func(obj any) (map[string]any, error)
 
 // Validator performs validation on Go objects based on a set of rules.
 type Validator struct {
-	engine    *Engine
-	objectEnv *cel.Env // For object-level rules (e.g., self.field > 10)
-	fieldEnv  *cel.Env // For field-level rules (e.g., self.size() > 0)
-	rules     map[string]ValidationRuleSet
-	adapters  map[string]TypeAdapter
-	logger    *slog.Logger
+	engine       *Engine
+	objectEnv    *cel.Env // For object-level rules (e.g., self.field > 10)
+	fieldEnv     *cel.Env // For field-level rules (e.g., self.size() > 0)
+	rules        map[string]ValidationRuleSet
+	genericRules map[string]ValidationRuleSet // Map from base type name to rule set
+	adapters     map[string]TypeAdapter
+	logger       *slog.Logger
 }
 
 // ValidatorOption is an option for configuring a Validator.
@@ -72,7 +73,7 @@ func WithTypeAdapters(adapters map[string]TypeAdapter) ValidatorOption {
 func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	// Default options
 	options := &validatorOptions{
-		logger:   slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
+		logger:   slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		adapters: make(map[string]TypeAdapter),
 	}
 
@@ -100,8 +101,19 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 		return nil, fmt.Errorf("failed to get rule sets: %w", err)
 	}
 
-	for k := range rules {
-		options.logger.Debug("loaded rule", "key", k)
+	// Pre-process rules to separate generic rules for efficient lookup.
+	genericRules := make(map[string]ValidationRuleSet)
+	for key, ruleSet := range rules {
+		if ruleSet.GenericTypeName != "" {
+			// The key is the base name (e.g., "mypackage.Box")
+			genericRules[key] = ruleSet
+			// The original `rules` map can keep the specific generic rule,
+			// or we can remove it. For now, let's keep it for simplicity,
+			// as it won't be matched directly by non-generic types.
+			options.logger.Debug("registered generic rule", "baseName", key, "signature", ruleSet.GenericTypeName)
+		} else {
+			options.logger.Debug("loaded rule", "key", key)
+		}
 	}
 
 	// Environment for object-level validation where 'self' is a map.
@@ -123,12 +135,13 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	}
 
 	return &Validator{
-		engine:    options.engine,
-		objectEnv: objectEnv,
-		fieldEnv:  fieldEnv,
-		rules:     rules,
-		adapters:  options.adapters,
-		logger:    options.logger,
+		engine:       options.engine,
+		objectEnv:    objectEnv,
+		fieldEnv:     fieldEnv,
+		rules:        rules,
+		genericRules: genericRules,
+		adapters:     options.adapters,
+		logger:       options.logger,
 	}, nil
 }
 
@@ -193,9 +206,11 @@ func (v *Validator) Validate(ctx context.Context, obj any) error {
 // getTypeName constructs a predictable type name string (e.g., "sources.User") from a reflect.Type.
 func (v *Validator) getTypeName(typ reflect.Type) string {
 	if pkgPath := typ.PkgPath(); pkgPath != "" {
-		parts := strings.Split(pkgPath, "/")
-		pkgName := parts[len(parts)-1]
-		return fmt.Sprintf("%s.%s", pkgName, typ.Name())
+		name := typ.Name()
+		if genericMarkerPos := strings.LastIndex(name, "["); genericMarkerPos != -1 {
+			name = name[:genericMarkerPos]
+		}
+		return fmt.Sprintf("%s.%s", pkgPath, name)
 	}
 	return typ.String() // Handle anonymous or built-in types
 }
@@ -220,15 +235,16 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 	// If the pointer points to a struct, try to adapt it.
 	if elem.Kind() == reflect.Struct {
 		typeName := v.getTypeName(elem.Type())
+		lookupName := typeName
 		// Also check for the generic version of the type name.
 		if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
 			baseName := typeName[:genericMarkerPos]
-			if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
-				typeName = typeSpecName
+			if _, ok := v.genericRules[baseName]; ok {
+				lookupName = baseName
 			}
 		}
 
-		if adapter, ok := v.adapters[typeName]; ok {
+		if adapter, ok := v.adapters[lookupName]; ok {
 			adapted, err := adapter(elemInterface)
 			if err == nil {
 				return adapted // Success! Return the map.
@@ -268,30 +284,32 @@ func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[
 	typeName := v.getTypeName(typ)
 
 	// Normalize generic type names for rule lookup.
-	// reflect.Type.Name() for "Box[string]" is "Box[string]".
-	// We want to match it to the parser's output "Box[T]".
+	lookupName := typeName
+	isGeneric := false
 	if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
 		baseName := typeName[:genericMarkerPos]
 		v.logger.Debug("detected generic type", "original", typeName, "base", baseName)
-		// This is a simplification. It assumes a single type parameter named T.
-		// A more robust solution would parse the type parameters from the parser
-		// and use them here.
-		// For now, let's align with the test case `Box[T]`.
-		if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
-			v.logger.Debug("found matching generic rule", "from", baseName, "to", typeSpecName)
-			typeName = typeSpecName
+		if _, ok := v.genericRules[baseName]; ok {
+			lookupName = baseName
+			isGeneric = true
 		}
 	}
 
-	// Get the adapter for the current type. If none, we can't validate its fields with CEL.
-	adapter, hasAdapter := v.adapters[typeName]
+	// Get the adapter for the current type.
+	// For generic types, we look up the adapter using the base name.
+	adapter, hasAdapter := v.adapters[lookupName]
 	if !hasAdapter {
-		// Even without an adapter, we must still recurse into its fields.
-		v.logger.Debug("no TypeAdapter, but continuing to recurse", "type", typeName)
+		v.logger.Debug("no TypeAdapter, but continuing to recurse", "type", lookupName)
 	}
 
-	// Get the rule set. If none, we might still need to recurse.
-	ruleSet, hasRules := v.rules[typeName]
+	// Get the rule set.
+	var ruleSet ValidationRuleSet
+	var hasRules bool
+	if isGeneric {
+		ruleSet, hasRules = v.genericRules[lookupName]
+	} else {
+		ruleSet, hasRules = v.rules[lookupName]
+	}
 
 	// If there are rules and an adapter, perform CEL validation.
 	if hasRules && hasAdapter {

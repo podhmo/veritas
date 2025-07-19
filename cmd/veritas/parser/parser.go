@@ -70,29 +70,20 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 						continue
 					}
 
-					var structNameBuilder strings.Builder
-					structNameBuilder.WriteString(typeSpec.Name.Name)
-
-					if typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0 {
-						structNameBuilder.WriteString("[")
-						for i, p := range typeSpec.TypeParams.List {
-							if i > 0 {
-								structNameBuilder.WriteString(", ")
-							}
-							// p.Names is a list of identifiers, e.g., "T" in T any
-							for j, name := range p.Names {
-								if j > 0 {
-									structNameBuilder.WriteString(", ")
-								}
-								structNameBuilder.WriteString(name.Name)
-							}
-						}
-						structNameBuilder.WriteString("]")
-					}
-					structName := structNameBuilder.String()
-
+					baseStructName := typeSpec.Name.Name
 					ruleSet := veritas.ValidationRuleSet{
 						FieldRules: make(map[string][]string),
+					}
+
+					// Handle generics: store the full signature but use the base name for the key.
+					if typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0 {
+						var genericParams []string
+						for _, p := range typeSpec.TypeParams.List {
+							for _, name := range p.Names {
+								genericParams = append(genericParams, name.Name)
+							}
+						}
+						ruleSet.GenericTypeName = fmt.Sprintf("%s[%s]", baseStructName, strings.Join(genericParams, ", "))
 					}
 
 					if doc := genDecl.Doc; doc != nil {
@@ -107,9 +98,9 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 					p.extractRulesForStruct(pkg, structType, &ruleSet)
 
 					if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
-						// Use PkgPath instead of Name to get a unique identifier for the package,
-						// especially crucial for the `main` package.
-						fullTypeName := fmt.Sprintf("%s.%s", pkg.PkgPath, structName)
+						// Use PkgPath and the base struct name for a stable key.
+						// The full generic signature is stored in the ruleSet itself.
+						fullTypeName := fmt.Sprintf("%s.%s", pkg.PkgPath, baseStructName)
 						ruleSets[fullTypeName] = ruleSet
 					}
 				}

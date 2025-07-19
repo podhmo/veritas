@@ -55,6 +55,30 @@ func boxAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
+func pairAdapter(obj any) (map[string]any, error) {
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("pairAdapter supports only structs, got %T", obj)
+	}
+
+	firstField := val.FieldByName("First")
+	if !firstField.IsValid() {
+		return nil, fmt.Errorf("no 'First' field in %T", obj)
+	}
+	secondField := val.FieldByName("Second")
+	if !secondField.IsValid() {
+		return nil, fmt.Errorf("no 'Second' field in %T", obj)
+	}
+
+	return map[string]any{
+		"First":  firstField.Interface(),
+		"Second": secondField.Interface(),
+	}, nil
+}
+
 func itemAdapter(obj any) (map[string]any, error) {
 	var item *sources.Item
 	switch v := obj.(type) {
@@ -177,15 +201,17 @@ func TestValidator_Validate(t *testing.T) {
 	provider := NewJSONRuleProvider("testdata/rules/user.json")
 
 	// Define the adapters for the types we want to validate.
+	const pkgPrefix = "github.com/podhmo/veritas/testdata/sources."
 	adapters := map[string]TypeAdapter{
-		"sources.Password":         passwordAdapter,
-		"sources.MockUser":         mockUserAdapter,
-		"sources.EmbeddedUser":     embeddedUserAdapter,
-		"sources.ComplexUser":      complexUserAdapter,
-		"sources.Profile":          profileAdapter,
-		"sources.UserWithProfiles": userWithProfilesAdapter,
-		"sources.Box[T]":           boxAdapter,
-		"sources.Item":             itemAdapter,
+		pkgPrefix + "Password":         passwordAdapter,
+		pkgPrefix + "MockUser":         mockUserAdapter,
+		pkgPrefix + "EmbeddedUser":     embeddedUserAdapter,
+		pkgPrefix + "ComplexUser":      complexUserAdapter,
+		pkgPrefix + "Profile":          profileAdapter,
+		pkgPrefix + "UserWithProfiles": userWithProfilesAdapter,
+		pkgPrefix + "Box":              boxAdapter,
+		pkgPrefix + "Pair":             pairAdapter,
+		pkgPrefix + "Item":             itemAdapter,
 	}
 
 	// Create a new validator with the adapters.
@@ -228,7 +254,7 @@ func TestValidator_Validate(t *testing.T) {
 				ID:    intPtr(1),
 			},
 			ctx:     context.Background(),
-			wantErr: errors.Join(NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`)),
+			wantErr: errors.Join(NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`)),
 		},
 		{
 			name: "object with multiple errors",
@@ -251,7 +277,7 @@ func TestValidator_Validate(t *testing.T) {
 				ID:    intPtr(1),
 			},
 			ctx:     context.Background(),
-			wantErr: errors.Join(NewValidationError("sources.MockUser", "", "self.Age >= 18")),
+			wantErr: errors.Join(NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "", "self.Age >= 18")),
 		},
 		{
 			name:    "unregistered type",
@@ -275,7 +301,7 @@ func TestValidator_Validate(t *testing.T) {
 				Name: "Gopher",
 			},
 			ctx:     context.Background(),
-			wantErr: NewValidationError("sources.EmbeddedUser", "ID", `self != "" && self.size() > 1`),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.EmbeddedUser", "ID", `self != "" && self.size() > 1`),
 		},
 		{
 			name: "invalid own struct field with embedded",
@@ -284,7 +310,7 @@ func TestValidator_Validate(t *testing.T) {
 				Name: "", // Fails nonzero check
 			},
 			ctx:     context.Background(),
-			wantErr: NewValidationError("sources.EmbeddedUser", "Name", `self != ""`),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.EmbeddedUser", "Name", `self != ""`),
 		},
 		{
 			name: "valid complex object",
@@ -309,7 +335,7 @@ func TestValidator_Validate(t *testing.T) {
 				},
 			},
 			ctx:     context.Background(),
-			wantErr: NewValidationError("sources.ComplexUser", "Scores", `self.all(x, x >= 0)`),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.ComplexUser", "Scores", `self.all(x, x >= 0)`),
 		},
 		{
 			name: "valid nested structs in slice and map",
@@ -335,7 +361,7 @@ func TestValidator_Validate(t *testing.T) {
 				},
 			},
 			ctx:          context.Background(),
-			wantErr:      NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`),
+			wantErr:      NewValidationError("github.com/podhmo/veritas/testdata/sources.Profile", "Handle", `self != "" && self.size() > 2`),
 			isMultiError: true, // It's a single error, but let's check for its presence
 		},
 		{
@@ -347,7 +373,7 @@ func TestValidator_Validate(t *testing.T) {
 				},
 			},
 			ctx:          context.Background(),
-			wantErr:      NewValidationError("sources.Profile", "Platform", `self != ""`),
+			wantErr:      NewValidationError("github.com/podhmo/veritas/testdata/sources.Profile", "Platform", `self != ""`),
 			isMultiError: true, // It's a single error, but let's check for its presence
 		},
 		{
@@ -378,7 +404,7 @@ func TestValidator_Validate(t *testing.T) {
 				Value: nil,
 			},
 			ctx:          context.Background(),
-			wantErr:      NewValidationError("sources.Box[T]", "Value", `self != null`),
+			wantErr:      NewValidationError("sources.Box[*string]", "Value", `self != null`),
 			isMultiError: true, // Expect both type and field errors
 		},
 		{
@@ -395,7 +421,7 @@ func TestValidator_Validate(t *testing.T) {
 				Value: &sources.Item{Name: ""}, // name is required
 			},
 			ctx:          context.Background(),
-			wantErr:      NewValidationError("sources.Item", "Name", `self != ""`),
+			wantErr:      NewValidationError("github.com/podhmo/veritas/testdata/sources.Item", "Name", `self != ""`),
 			isMultiError: true,
 		},
 		{
@@ -412,7 +438,7 @@ func TestValidator_Validate(t *testing.T) {
 				Value: nil,
 			},
 			ctx:          context.Background(),
-			wantErr:      NewValidationError("sources.Box[T]", "Value", `self != null`),
+			wantErr:      NewValidationError("sources.Box[*int]", "Value", `self != null`),
 			isMultiError: true, // Expect both type and field errors
 		},
 		{
@@ -456,7 +482,26 @@ func TestValidator_Validate(t *testing.T) {
 				Value: "weak",
 			},
 			ctx:     context.Background(),
-			wantErr: NewValidationError("sources.Password", "Value", `self.matches('^[a-zA-Z0-9]{8,}$')`),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.Password", "Value", `self.matches('^[a-zA-Z0-9]{8,}$')`),
+		},
+		{
+			name: "valid generic pair",
+			obj: &sources.Pair[string, int]{
+				First:  "hello",
+				Second: 123,
+			},
+			ctx:     context.Background(),
+			wantErr: nil,
+		},
+		{
+			name: "invalid generic pair with nil second value",
+			obj: &sources.Pair[string, *int]{
+				First:  "hello",
+				Second: nil,
+			},
+			ctx:          context.Background(),
+			wantErr:      NewValidationError("sources.Pair[string, *int]", "Second", "self != null"),
+			isMultiError: true,
 		},
 	}
 
@@ -473,9 +518,9 @@ func TestValidator_Validate(t *testing.T) {
 				// Special handling for the multi-error tests
 				switch tt.name {
 				case "object with multiple errors":
-					nameRuleError := NewValidationError("sources.MockUser", "Name", `self != ""`).Error()
-					emailRuleError := NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`).Error()
-					idRuleError := NewValidationError("sources.MockUser", "ID", `self != null`).Error()
+					nameRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Name", `self != ""`).Error()
+					emailRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`).Error()
+					idRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "ID", `self != null`).Error()
 					if !strings.Contains(errStr, nameRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRuleError, errStr)
 					}
@@ -486,18 +531,18 @@ func TestValidator_Validate(t *testing.T) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", idRuleError, errStr)
 					}
 				case "invalid struct in slice":
-					handleRuleError := NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()
+					handleRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()
 					if !strings.Contains(errStr, handleRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", handleRuleError, errStr)
 					}
 				case "invalid struct in map":
-					platformRuleError := NewValidationError("sources.Profile", "Platform", `self != ""`).Error()
+					platformRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.Profile", "Platform", `self != ""`).Error()
 					if !strings.Contains(errStr, platformRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", platformRuleError, errStr)
 					}
 				case "multiple errors in nested structs":
-					platformRuleError := NewValidationError("sources.Profile", "Platform", `self != ""`).Error()
-					handleRuleError := NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()
+					platformRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.Profile", "Platform", `self != ""`).Error()
+					handleRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()
 					if !strings.Contains(errStr, platformRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", platformRuleError, errStr)
 					}
@@ -505,8 +550,17 @@ func TestValidator_Validate(t *testing.T) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", handleRuleError, errStr)
 					}
 				case "invalid generic struct with nil pointer", "invalid generic struct with nil int pointer":
-					typeRuleError := NewValidationError("sources.Box[T]", "", "self.Value != null").Error()
-					fieldRuleError := NewValidationError("sources.Box[T]", "Value", "self != null").Error()
+					typeRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.Box[*string]", "", "self.Value != null").Error()
+					fieldRuleError := NewValidationError("github.com/podhmo/veritas/testdata/sources.Box[*string]", "Value", "self != null").Error()
+					if !strings.Contains(errStr, typeRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", typeRuleError, errStr)
+					}
+					if !strings.Contains(errStr, fieldRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", fieldRuleError, errStr)
+					}
+				case "invalid generic pair with nil second value":
+					typeRuleError := NewValidationError("sources.Pair[string, *int]", "", "self.First != null && self.Second != null").Error()
+					fieldRuleError := NewValidationError("sources.Pair[string, *int]", "Second", "self != null").Error()
 					if !strings.Contains(errStr, typeRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", typeRuleError, errStr)
 					}
@@ -559,7 +613,7 @@ func TestValidator_WithGlobalRegistry(t *testing.T) {
 			"Email": u.Email,
 		}, nil
 	}
-	adapters := map[string]TypeAdapter{"veritas.User": userAdapter}
+	adapters := map[string]TypeAdapter{"github.com/podhmo/veritas.User": userAdapter}
 
 	// Register a rule set in the global registry.
 	ruleSet := ValidationRuleSet{
@@ -567,7 +621,7 @@ func TestValidator_WithGlobalRegistry(t *testing.T) {
 			"Name": {`self != ""`},
 		},
 	}
-	Register("veritas.User", ruleSet)
+	Register("github.com/podhmo/veritas.User", ruleSet)
 	defer UnregisterAll() // Clean up the registry after the test.
 
 	// Create a new validator using the global registry (provider is nil).

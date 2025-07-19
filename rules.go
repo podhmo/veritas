@@ -7,6 +7,11 @@ import (
 
 // ValidationRuleSet holds all validation rules for a single Go type.
 type ValidationRuleSet struct {
+	// GenericTypeName holds the fully qualified generic type name, like "Box[T]".
+	// This is used by the code generator. The validator itself will use the map key,
+	// which is the base type name (e.g., "mypackage.Box").
+	GenericTypeName string `json:"genericType,omitempty"`
+
 	TypeRules  []string            `json:"typeRules"`
 	FieldRules map[string][]string `json:"fieldRules"`
 }
