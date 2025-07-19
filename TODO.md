@@ -49,11 +49,11 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 ## Phase 2.5: Linter Development (v0.2.1)
 
-**Goal**: Develop the `veritas-lint` tool to statically check for issues in veritas rule definitions.
+**Goal**: Develop the `veritas` CLI tool's linting capabilities to statically check for issues in veritas rule definitions.
 
 -   **[x] 2.5.1: Initial Linter Setup**
-    -   [x] 2.5.1.1: Create the `cmd/veritas-lint` directory and `main.go`.
-    -   [x] 2.5.1.2: Use `golang.org/x/tools/go/analysis/singlechecker` to create the linter's entry point.
+    -   [x] 2.5.1.1: Integrate linting functionality into `cmd/veritas/main.go` behind a `-lint` flag.
+    -   [x] 2.5.1.2: Use `golang.org/x/tools/go/analysis/multichecker` to run multiple analyzers.
     -   [x] 2.5.1.3: Create the `lint` package with a basic `analysis.Analyzer` definition.
 -   **[x] 2.5.2: Rule Loading and Parsing**
     -   [x] 2.5.2.1: Implement logic for the linter to find and parse `rules.json` files within the target project.
