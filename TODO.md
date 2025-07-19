@@ -146,5 +146,5 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 - [x] Update `TODO.md`
 
 ---
-- [ ] linter tests are failing. The `veritas-required` analyzer is not being found.
-- [ ] `go test ./...` is failing.
+- [x] linter tests are failing. The `veritas-required` analyzer is not being found.
+- [x] `go test ./...` is failing.
