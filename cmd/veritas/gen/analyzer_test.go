@@ -3,7 +3,6 @@ package gen_test
 import (
 	"flag"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/gostaticanalysis/codegen/codegentest"
@@ -19,13 +18,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGenerator(t *testing.T) {
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get current directory: %v", err)
-	}
-	testdata := filepath.Join(wd, "testdata")
-	t.Setenv("GOPATH", testdata)
-	rs := codegentest.Run(t, testdata, gen.Generator, "a")
+	rs := codegentest.Run(t, codegentest.TestData(), gen.Generator, "github.com/podhmo/veritas/cmd/veritas/gen/src/a")
 	if len(rs) > 0 {
 		for _, r := range rs {
 			if r.Err != nil {
