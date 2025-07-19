@@ -79,3 +79,10 @@ type UserWithProfiles struct {
 type Password struct {
 	Value string
 }
+
+// AnotherUser is a struct that is structurally similar to MockUser,
+// but has a different type name. This is used to test type mapping.
+type AnotherUser struct {
+	Username string
+	Email    string
+}

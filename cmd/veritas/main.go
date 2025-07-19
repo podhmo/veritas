@@ -11,6 +11,10 @@ import (
 )
 
 func main() {
+	gen.Generator.Flags.VisitAll(func(f *flag.Flag) {
+		flag.CommandLine.Var(f.Value, f.Name, f.Usage)
+	})
+
 	var lintFlag bool
 	flag.BoolVar(&lintFlag, "lint", false, "run linter")
 	flag.Parse()

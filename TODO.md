@@ -139,8 +139,9 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 ## Phase 6: Additional Tasks
 
-- [x] Embed `rules.json` in `main.go`
-- [x] Update `run` function to use embedded data
-- [x] Format the code
-- [x] Run tests
-- [x] Update `TODO.md`
+- [x] Implement -o flag in `cmd/veritas`
+  - [x] The `cmd/veritas` command should accept an `-o` flag to specify the output file for the generated code.
+- [x] Fix the `gencode` example
+  - [x] The `gencode.User` type needs to be correctly mapped to the `def.User` validation rules.
+  - [x] **NOTE:** This is now fixed. The validator now uses a `TypeAdapterTarget` to correctly map types to their validation rules.
+- [x] Remove the `run.go` file from the `gencode` example.
