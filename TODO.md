@@ -141,7 +141,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 - [x] Implement -o flag in `cmd/veritas`
   - [x] The `cmd/veritas` command should accept an `-o` flag to specify the output file for the generated code.
-- [ ] Fix the `gencode` example
-  - [ ] The `gencode.User` type needs to be correctly mapped to the `def.User` validation rules.
-  - [ ] **NOTE:** This is currently broken. The validator is not correctly picking up the `TypeAdapter`.
+- [x] Fix the `gencode` example
+  - [x] The `gencode.User` type needs to be correctly mapped to the `def.User` validation rules.
+  - [x] **NOTE:** This is now fixed. The validator now uses a `TypeAdapterTarget` to correctly map types to their validation rules.
 - [x] Remove the `run.go` file from the `gencode` example.

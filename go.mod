@@ -2,6 +2,8 @@ module github.com/podhmo/veritas
 
 go 1.24
 
+replace a => ./cmd/veritas/gen/testdata/src/a
+
 require (
 	github.com/google/cel-go v0.21.0
 	github.com/google/go-cmp v0.6.0
@@ -10,6 +12,7 @@ require (
 )
 
 require (
+	a v0.0.0-00010101000000-000000000000 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/gostaticanalysis/codegen v0.1.0 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect

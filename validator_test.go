@@ -167,6 +167,25 @@ func passwordAdapter(obj any) (map[string]any, error) {
 	}, nil
 }
 
+func anotherUserAdapter(obj any) (map[string]any, error) {
+	var user *sources.AnotherUser
+	switch v := obj.(type) {
+	case sources.AnotherUser:
+		user = &v
+	case *sources.AnotherUser:
+		user = v
+	default:
+		return nil, fmt.Errorf("unsupported type for AnotherUser adapter: %T", obj)
+	}
+
+	return map[string]any{
+		"Name":  user.Username, // Note the field name mapping
+		"Email": user.Email,
+		"Age":   99, // Mocking a default value
+		"ID":    -1, // Mocking a default value
+	}, nil
+}
+
 func TestValidator_Validate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	engine, err := NewEngine(logger, DefaultFunctions()...)
@@ -177,15 +196,35 @@ func TestValidator_Validate(t *testing.T) {
 	provider := NewJSONRuleProvider("testdata/rules/user.json")
 
 	// Define the adapters for the types we want to validate.
-	adapters := map[string]TypeAdapter{
-		"sources.Password":         passwordAdapter,
-		"sources.MockUser":         mockUserAdapter,
-		"sources.EmbeddedUser":     embeddedUserAdapter,
-		"sources.ComplexUser":      complexUserAdapter,
-		"sources.Profile":          profileAdapter,
-		"sources.UserWithProfiles": userWithProfilesAdapter,
-		"sources.Box[T]":           boxAdapter,
-		"sources.Item":             itemAdapter,
+	adapters := map[reflect.Type]TypeAdapterTarget{
+		reflect.TypeOf(sources.Password{}):         {TargetName: "sources.Password", Adapter: passwordAdapter},
+		reflect.TypeOf(&sources.Password{}):        {TargetName: "sources.Password", Adapter: passwordAdapter},
+		reflect.TypeOf(sources.MockUser{}):         {TargetName: "sources.MockUser", Adapter: mockUserAdapter},
+		reflect.TypeOf(&sources.MockUser{}):        {TargetName: "sources.MockUser", Adapter: mockUserAdapter},
+		reflect.TypeOf(sources.EmbeddedUser{}):     {TargetName: "sources.EmbeddedUser", Adapter: embeddedUserAdapter},
+		reflect.TypeOf(&sources.EmbeddedUser{}):    {TargetName: "sources.EmbeddedUser", Adapter: embeddedUserAdapter},
+		reflect.TypeOf(sources.ComplexUser{}):      {TargetName: "sources.ComplexUser", Adapter: complexUserAdapter},
+		reflect.TypeOf(&sources.ComplexUser{}):     {TargetName: "sources.ComplexUser", Adapter: complexUserAdapter},
+		reflect.TypeOf(sources.Profile{}):          {TargetName: "sources.Profile", Adapter: profileAdapter},
+		reflect.TypeOf(&sources.Profile{}):         {TargetName: "sources.Profile", Adapter: profileAdapter},
+		reflect.TypeOf(sources.UserWithProfiles{}): {TargetName: "sources.UserWithProfiles", Adapter: userWithProfilesAdapter},
+		reflect.TypeOf(&sources.UserWithProfiles{}): {TargetName: "sources.UserWithProfiles", Adapter: userWithProfilesAdapter},
+		reflect.TypeOf(sources.Item{}):             {TargetName: "sources.Item", Adapter: itemAdapter},
+		reflect.TypeOf(&sources.Item{}):            {TargetName: "sources.Item", Adapter: itemAdapter},
+
+		// generic types
+		reflect.TypeOf(sources.Box[string]{}):    {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(&sources.Box[string]{}):   {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(sources.Box[*string]{}):   {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(&sources.Box[*string]{}):  {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(sources.Box[*int]{}):      {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(&sources.Box[*int]{}):     {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(sources.Box[*sources.Item]{}):   {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+		reflect.TypeOf(&sources.Box[*sources.Item]{}):  {TargetName: "sources.Box[T]", Adapter: boxAdapter},
+
+		// type mapping
+		reflect.TypeOf(sources.AnotherUser{}): {TargetName: "sources.MockUser", Adapter: anotherUserAdapter},
+		reflect.TypeOf(&sources.AnotherUser{}): {TargetName: "sources.MockUser", Adapter: anotherUserAdapter},
 	}
 
 	// Create a new validator with the adapters.
@@ -257,7 +296,25 @@ func TestValidator_Validate(t *testing.T) {
 			name:    "unregistered type",
 			obj:     struct{ Age int }{10},
 			ctx:     context.Background(),
-			wantErr: NewFatalError("no TypeAdapter registered for type struct { Age int } or struct { Age int }"),
+			wantErr: nil, // No adapter means no CEL validation, but recursion should still happen. No rules, so no error.
+		},
+		{
+			name: "type mapping with adapter",
+			obj: &sources.AnotherUser{ // This type is not in the rules.json
+				Username: "gopher-alias",
+				Email:    "gopher-alias@example.com",
+			},
+			ctx:     context.Background(),
+			wantErr: nil,
+		},
+		{
+			name: "invalid type mapping with adapter",
+			obj: &sources.AnotherUser{
+				Username: "gopher-alias",
+				Email:    "invalid-email", // This should fail MockUser's email validation
+			},
+			ctx:     context.Background(),
+			wantErr: NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
 		},
 		{
 			name: "valid embedded struct",
@@ -559,7 +616,9 @@ func TestValidator_WithGlobalRegistry(t *testing.T) {
 			"Email": u.Email,
 		}, nil
 	}
-	adapters := map[string]TypeAdapter{"veritas.User": userAdapter}
+	adapters := map[reflect.Type]TypeAdapterTarget{
+		reflect.TypeOf(User{}): {TargetName: "veritas.User", Adapter: userAdapter},
+	}
 
 	// Register a rule set in the global registry.
 	ruleSet := ValidationRuleSet{
@@ -606,8 +665,8 @@ func setupBenchmark(b *testing.B) (*Validator, *sources.MockUser, *sources.MockU
 
 	provider := NewJSONRuleProvider("testdata/rules/user.json")
 
-	adapters := map[string]TypeAdapter{
-		"sources.MockUser": mockUserAdapter,
+	adapters := map[reflect.Type]TypeAdapterTarget{
+		reflect.TypeOf(&sources.MockUser{}): {TargetName: "sources.MockUser", Adapter: mockUserAdapter},
 	}
 
 	validator, err := NewValidator(

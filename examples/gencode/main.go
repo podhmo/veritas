@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"os"
 
+	"reflect"
+
 	"github.com/podhmo/veritas"
-	_ "github.com/podhmo/veritas/examples/gencode/def"
+	_ "github.com/podhmo/veritas/examples/gencode/validation"
 )
 
 type User struct {
@@ -26,16 +28,19 @@ func run() error {
 	ctx := context.Background()
 	v, err := veritas.NewValidator(
 		veritas.WithTypeAdapters(
-			map[string]veritas.TypeAdapter{
-				"def.User": func(ob any) (map[string]any, error) {
-					v, ok := ob.(User)
-					if !ok {
-						return nil, fmt.Errorf("unexpected type %T", ob)
-					}
-					return map[string]any{
-						"Name":  v.Name,
-						"Email": v.Email,
-					}, nil
+			map[reflect.Type]veritas.TypeAdapterTarget{
+				reflect.TypeOf(User{}): { // KEY is reflect.Type
+					TargetName: "github.com/podhmo/veritas/examples/gencode/def.User", // TARGET rule set
+					Adapter: func(ob any) (map[string]any, error) {
+						v, ok := ob.(User)
+						if !ok {
+							return nil, fmt.Errorf("unexpected type %T", ob)
+						}
+						return map[string]any{
+							"Name":  v.Name,
+							"Email": v.Email,
+						}, nil
+					},
 				},
 			},
 		),

@@ -11,7 +11,7 @@ func init() {
 				`custom.matches(self, '^[^@]+@[^@]+$')`,
 			},
 			"Name": {
-				`len(self) > 0`,
+				`self.size() > 0`,
 			},
 		},
 	})

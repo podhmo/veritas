@@ -1,3 +1,3 @@
 package gencode
 
-//go:generate go run ./run.go -pkg=../def -o=../validation/validator.go
+//go:generate go run ../../../cmd/veritas -o ../validation/validator.go ../def
