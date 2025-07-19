@@ -145,3 +145,8 @@ This document outlines the detailed, phased development plan for the "Veritas" v
   - [x] The `gencode.User` type needs to be correctly mapped to the `def.User` validation rules.
   - [x] **NOTE:** This is now fixed. The validator now uses a `TypeAdapterTarget` to correctly map types to their validation rules.
 - [x] Remove the `run.go` file from the `gencode` example.
+
+## Phase 7: Refactoring and Performance Tuning
+
+- [x] Refactor the analyzer for performance based on `docs/analyzer-tuning.md`.
+  - This involved creating `parser.PackageInfo` to avoid redundant package loading by `veritas-gen`, updating the parser to use it, while keeping the original `Parse` method for backward compatibility.

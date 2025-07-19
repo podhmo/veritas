@@ -165,7 +165,6 @@ func (v *Validator) Validate(ctx context.Context, obj any) error {
 	} else {
 	}
 
-
 	// Use a helper function to perform the validation recursively.
 	v.validateRecursive(ctx, obj, &allErrors)
 
