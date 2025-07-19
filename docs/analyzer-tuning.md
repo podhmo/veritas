@@ -60,11 +60,21 @@ A new function, `ParseDirectly`, will be added to the `parser`. It will accept a
 // ParseDirectly parses validation rules from the given package information
 // without loading packages itself.
 func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationRuleSet, error) {
-    // ... existing parsing logic, but using the 'info' struct ...
+    // ... implementation ...
 }
 ```
 
-### 3. Update the `gen` Package
+### 3. Refactor Internal Parser Functions
+
+The internal helper functions within the parser that currently accept a `*packages.Package` argument will be refactored to accept the new `PackageInfo` struct or its relevant fields directly. This ensures that the entire parsing process within the `parser` package no longer depends on the `packages.Package` type.
+
+**Affected functions include:**
+*   `extractRulesForStruct(pkg *packages.Package, ...)` will be changed to `extractRulesForStruct(info PackageInfo, ...)`
+*   `getEmbeddedStruct(pkg *packages.Package, ...)` will be changed to `getEmbeddedStruct(info PackageInfo, ...)`
+
+The logic inside `ParseDirectly` will be adapted from the old `Parse` function, but instead of passing the `pkg` variable, it will pass the `info` struct to these helper methods.
+
+### 4. Update the `gen` Package
 
 The `run` function in `cmd/veritas/gen/analyzer.go` will be modified to instantiate and populate the `PackageInfo` struct from the `*codegen.Pass` object and then call the new `parser.ParseDirectly` function.
 
@@ -92,4 +102,4 @@ func run(pass *codegen.Pass) error {
 }
 ```
 
-This refactoring will remove the redundant package loading step and significantly improve the performance and efficiency of the `veritas-gen` tool by reusing the already available analysis data.
+This refactoring will remove the redundant package loading step and significantly improve the performance and efficiency of the `veritas-gen` tool by reusing the already available analysis data. After this change, the original `Parse` function in the parser will be removed.
