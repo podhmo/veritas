@@ -5,7 +5,7 @@ import (
 )
 
 func init() {
-	veritas.Register("github.com/podhmo/veritas/cmd/veritas/gen/testdata/src/a.User", veritas.ValidationRuleSet{
+	veritas.Register("testpkg/a.User", veritas.ValidationRuleSet{
 		TypeRules: []string{
 			`self.Email != ""`,
 		},
