@@ -38,3 +38,7 @@ func DefaultFunctions() []cel.EnvOption {
 		),
 	}
 }
+
+func DefaultEnvOptions() []cel.EnvOption {
+	return append(DefaultFunctions(), cel.StdLib())
+}

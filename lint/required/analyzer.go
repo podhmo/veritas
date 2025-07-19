@@ -11,7 +11,7 @@ import (
 )
 
 var Analyzer = &analysis.Analyzer{
-	Name:      "required",
+	Name:     "required",
 	Doc:      "check for invalid usage of 'required' tag",
 	Run:      run,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},

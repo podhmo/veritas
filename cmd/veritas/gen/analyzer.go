@@ -16,10 +16,18 @@ import (
 
 const doc = "gogen is a tool to generate validation code from Go source code."
 
+var (
+	flagOutput string
+)
+
 var Generator = &codegen.Generator{
 	Name: "gogen",
 	Doc:  doc,
 	Run:  run,
+}
+
+func init() {
+	Generator.Flags.StringVar(&flagOutput, "o", "", "output file name")
 }
 
 func run(pass *codegen.Pass) error {
@@ -27,11 +35,6 @@ func run(pass *codegen.Pass) error {
 	p := parser.NewParser(logger)
 
 	pkgPath := pass.Pkg.Path()
-	if _, err := os.Stat(pkgPath); err != nil {
-		if _, err := os.Stat("testdata"); err == nil {
-			pkgPath = "github.com/podhmo/veritas/cmd/veritas/gen/testdata/src/a"
-		}
-	}
 
 	ruleSets, err := p.Parse(pkgPath)
 	if err != nil {
@@ -44,7 +47,17 @@ func run(pass *codegen.Pass) error {
 	gen := &GoCodeGenerator{
 		logger: logger,
 	}
-	return gen.Generate(pass.Pkg.Name(), ruleSets, pass.Output)
+
+	if flagOutput == "" {
+		return gen.Generate(pass.Pkg.Name(), ruleSets, pass.Output)
+	}
+
+	f, err := os.Create(flagOutput)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer f.Close()
+	return gen.Generate(pass.Pkg.Name(), ruleSets, f)
 }
 
 // GoCodeGenerator generates Go code for validation rule sets.
