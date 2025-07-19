@@ -150,3 +150,35 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 - [x] Refactor the analyzer for performance based on `docs/analyzer-tuning.md`.
   - This involved creating `parser.PackageInfo` to avoid redundant package loading by `veritas-gen`, updating the parser to use it, while keeping the original `Parse` method for backward compatibility.
+
+## Phase 8: Remove Adapter Pattern
+
+**Goal**: Remove the `TypeAdapter` pattern to simplify the API and improve performance by using `cel-go`'s native struct support.
+
+-   [ ] **8.1: Modify `NewValidator` to Accept Types**:
+    -   [ ] Create a new `ValidatorOption` called `WithTypes(types ...any)`.
+    -   [ ] This option will take a variadic list of Go struct instances (e.g., `User{}`, `Post{}`).
+    -   [ ] Inside `NewValidator`, collect these types and use them to create a new `cel.Env` with the `cel.Types()` option. This new environment should be used for object-level validations.
+
+-   [ ] **8.2: Deprecate and Remove `TypeAdapter`**:
+    -   [ ] Remove the `TypeAdapterFunc`, `TypeAdapterTarget`, and the `adapters` map from the `Validator` struct.
+    -   [ ] Remove the `WithTypeAdapters` option.
+    -   [ ] This is a breaking change, and should be noted in the release.
+
+-   [ ] **8.3: Update the Validation Logic**:
+    -   [ ] In `validator.go`, the `validateRecursive` function currently looks for an adapter and uses it to convert the object to a map.
+    -   [ ] This logic needs to be changed. Instead of converting to a map, it should pass the raw struct object directly to the `prog.ContextEval()` call.
+    -   [ ] The `objectVars` map will look like this: `map[string]any{"self": obj}` where `obj` is the user's struct, not a map.
+
+-   [ ] **8.4: Simplify `NewValidatorFromJSONFile`**:
+    -   [ ] Change the signature of `NewValidatorFromJSONFile` to accept the new `WithTypes` option.
+    -   [ ] Remove the now-defunct `WithTypeAdapters` option from its signature and documentation.
+
+-   [ ] **8.5: Update `go generate` Path (If Necessary)**:
+    -   [ ] The `go generate` mechanism currently relies on the global registry. The `NewValidator()` function (with no options) uses this global registry.
+    -   [ ] We need to ensure that when `NewValidator` is used, it can create an environment that can handle the types defined in the generated code. This might require a new mechanism to pass the types from the generated code to the validator. A simple approach would be to generate a function that returns the list of types, which the user can then pass to `NewValidator`.
+
+-   [ ] **8.6: Update Documentation and Examples**:
+    -   [ ] Update `README.md` to reflect the new, simpler API.
+    -   [ ] Update the `examples/http-server/main.go` to remove the `TypeAdapter` and use the new `WithTypes` option.
+    -   [ ] Update all other relevant documentation.
