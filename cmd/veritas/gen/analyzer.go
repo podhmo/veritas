@@ -26,16 +26,14 @@ func run(pass *codegen.Pass) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil)) // Create a logger
 	p := parser.NewParser(logger)
 
-	// This is not a robust way to find the root of the project.
-	// But for now, it works for the test.
 	pkgPath := pass.Pkg.Path()
 	if _, err := os.Stat(pkgPath); err != nil {
 		if _, err := os.Stat("testdata"); err == nil {
-			pkgPath = "testdata/src/a"
+			pkgPath = "github.com/podhmo/veritas/cmd/veritas/gen/testdata/src/a"
 		}
 	}
 
-	ruleSets, err := p.Parse("github.com/podhmo/veritas/cmd/veritas/gen/testdata/src/a")
+	ruleSets, err := p.Parse(pkgPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse: %w", err)
 	}
