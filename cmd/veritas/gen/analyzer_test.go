@@ -1,22 +1,12 @@
 package gen_test
 
 import (
-	"bytes"
 	"flag"
-	"fmt"
-	"go/types"
-	"io"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/gostaticanalysis/codegen/codegentest"
 	"github.com/podhmo/veritas/cmd/veritas/gen"
-	"golang.org/x/tools/go/analysis"
-	"golang.org/x/tools/go/analysis/analysistest"
-	"golang.org/x/tools/go/analysis/checker"
-	"golang.org/x/tools/go/packages"
 )
 
 var flagUpdate bool
