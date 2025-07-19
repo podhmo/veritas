@@ -13,9 +13,14 @@ import (
 	"github.com/google/cel-go/common/types"
 )
 
-// TypeAdapter converts a Go object into a map representation that CEL can understand.
-// This is necessary to bypass issues with direct Go struct registration in cel-go.
-type TypeAdapter func(obj any) (map[string]any, error)
+// TypeAdapterFunc is the function signature for converting a Go object.
+type TypeAdapterFunc func(obj any) (map[string]any, error)
+
+// TypeAdapterTarget specifies the target rule set for a type adapter.
+type TypeAdapterTarget struct {
+	TargetName string
+	Adapter    TypeAdapterFunc
+}
 
 // Validator performs validation on Go objects based on a set of rules.
 type Validator struct {
@@ -23,7 +28,7 @@ type Validator struct {
 	objectEnv *cel.Env // For object-level rules (e.g., self.field > 10)
 	fieldEnv  *cel.Env // For field-level rules (e.g., self.size() > 0)
 	rules     map[string]ValidationRuleSet
-	adapters  map[string]TypeAdapter
+	adapters  map[reflect.Type]TypeAdapterTarget
 	logger    *slog.Logger
 }
 
@@ -34,7 +39,7 @@ type validatorOptions struct {
 	engine   *Engine
 	provider RuleProvider
 	logger   *slog.Logger
-	adapters map[string]TypeAdapter
+	adapters map[reflect.Type]TypeAdapterTarget
 }
 
 // WithEngine sets the CEL engine for the validator.
@@ -59,7 +64,7 @@ func WithLogger(logger *slog.Logger) ValidatorOption {
 }
 
 // WithTypeAdapters sets the type adapters for the validator.
-func WithTypeAdapters(adapters map[string]TypeAdapter) ValidatorOption {
+func WithTypeAdapters(adapters map[reflect.Type]TypeAdapterTarget) ValidatorOption {
 	return func(o *validatorOptions) {
 		for k, v := range adapters {
 			o.adapters[k] = v
@@ -73,7 +78,7 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	// Default options
 	options := &validatorOptions{
 		logger:   slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		adapters: make(map[string]TypeAdapter),
+		adapters: make(map[reflect.Type]TypeAdapterTarget),
 	}
 
 	// Apply user-provided options
@@ -117,6 +122,7 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	fieldOpts := make([]cel.EnvOption, len(options.engine.baseOpts))
 	copy(fieldOpts, options.engine.baseOpts)
 	fieldOpts = append(fieldOpts, cel.Variable("self", types.DynType))
+	fieldOpts = append(fieldOpts, cel.Declarations()) // Add standard declarations
 	fieldEnv, err := cel.NewEnv(fieldOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create field CEL environment: %w", err)
@@ -150,36 +156,15 @@ func (v *Validator) Validate(ctx context.Context, obj any) error {
 		return nil // Or perhaps an error? For now, we only validate structs.
 	}
 	typ := val.Type()
-	var typeName string
 	if pkgPath := typ.PkgPath(); pkgPath != "" {
 		parts := strings.Split(pkgPath, "/")
-		pkgName := parts[len(parts)-1]
+		_ = parts[len(parts)-1]
 		// typ.String() can be "pkg.Type" or "pkg.Type[T]"
 		// typ.Name() is just "Type" or "Type[T]"
 		// We need to construct "pkgName.Name"
-		typeName = fmt.Sprintf("%s.%s", pkgName, typ.Name())
 	} else {
-		typeName = typ.String()
 	}
 
-	// Also normalize the top-level type name if it's generic.
-	originalTypeName := typeName
-	if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
-		baseName := typeName[:genericMarkerPos]
-		v.logger.Debug("detected generic type at top level", "original", typeName, "base", baseName)
-		if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
-			v.logger.Debug("found matching generic rule at top level", "from", baseName, "to", typeSpecName)
-			typeName = typeSpecName
-		}
-	}
-
-	if _, ok := v.adapters[typeName]; !ok {
-		// Fallback for anonymous structs or other edge cases.
-		if _, ok := v.adapters[originalTypeName]; !ok {
-			return NewFatalError(fmt.Sprintf("no TypeAdapter registered for type %s or %s", typeName, originalTypeName))
-		}
-		typeName = originalTypeName
-	}
 
 	// Use a helper function to perform the validation recursively.
 	v.validateRecursive(ctx, obj, &allErrors)
@@ -208,6 +193,16 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 
 	// We only need to do something special for pointers.
 	if rv.Kind() != reflect.Ptr {
+		// If the value is a struct, it might have a direct adapter.
+		if rv.Kind() == reflect.Struct {
+			if adapterTarget, ok := v.adapters[rv.Type()]; ok {
+				adapted, err := adapterTarget.Adapter(value)
+				if err == nil {
+					return adapted // Success! Return the map.
+				}
+				v.logger.Warn("TypeAdapter failed for value", "type", rv.Type(), "error", err)
+			}
+		}
 		return value
 	}
 	if rv.IsNil() {
@@ -219,21 +214,12 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 
 	// If the pointer points to a struct, try to adapt it.
 	if elem.Kind() == reflect.Struct {
-		typeName := v.getTypeName(elem.Type())
-		// Also check for the generic version of the type name.
-		if genericMarkerPos := strings.LastIndex(typeName, "["); genericMarkerPos != -1 {
-			baseName := typeName[:genericMarkerPos]
-			if typeSpecName, ok := v.getGenericTypeName(baseName); ok {
-				typeName = typeSpecName
-			}
-		}
-
-		if adapter, ok := v.adapters[typeName]; ok {
-			adapted, err := adapter(elemInterface)
+		if adapterTarget, ok := v.adapters[elem.Type()]; ok {
+			adapted, err := adapterTarget.Adapter(elemInterface)
 			if err == nil {
 				return adapted // Success! Return the map.
 			}
-			v.logger.Warn("TypeAdapter failed for value", "type", typeName, "error", err)
+			v.logger.Warn("TypeAdapter failed for value", "type", elem.Type(), "error", err)
 		}
 	}
 
@@ -283,93 +269,108 @@ func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[
 		}
 	}
 
-	// Get the adapter for the current type. If none, we can't validate its fields with CEL.
-	adapter, hasAdapter := v.adapters[typeName]
-	if !hasAdapter {
-		// Even without an adapter, we must still recurse into its fields.
-		v.logger.Debug("no TypeAdapter, but continuing to recurse", "type", typeName)
-	}
-
-	// Get the rule set. If none, we might still need to recurse.
+	// Check if there is a specific adapter for this type.
+	adapterTarget, hasAdapter := v.adapters[typ]
 	ruleSet, hasRules := v.rules[typeName]
 
-	// If there are rules and an adapter, perform CEL validation.
-	if hasRules && hasAdapter {
-		// Convert the object to a map for CEL evaluation.
-		objMap, err := adapter(obj)
+	// If an adapter is found, it dictates the rule set to use.
+	if hasAdapter {
+		v.logger.Debug("found TypeAdapter", "source_type", typ, "target_rules", adapterTarget.TargetName)
+		ruleSet, hasRules = v.rules[adapterTarget.TargetName]
+		typeName = adapterTarget.TargetName // Use the target name for error reporting.
+	}
+
+	// If there are rules for this type (either directly or via an adapter), validate.
+	if hasRules {
+		// We need a map representation for CEL. This must come from an adapter.
+		var objMap map[string]any
+		var err error
+
+		if hasAdapter {
+			objMap, err = adapterTarget.Adapter(obj)
+		} else {
+			// This case handles nested structs that are not the top-level object.
+			// We assume they don't need a special adapter if they reached this point.
+			// A simple conversion can be attempted if needed, or we rely on field recursion.
+			// For now, let's assume if there's no explicit adapter, we can't create the map.
+			v.logger.Debug("no TypeAdapter, cannot perform CEL validation, but continuing to recurse", "type", typeName)
+		}
+
 		if err != nil {
 			v.logger.Error("failed to adapt object", "type", typeName, "error", err)
 			*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("TypeAdapter error for %s: %v", typeName, err)))
 			return // Stop validation for this object if adapter fails.
 		}
 
-		// Apply type rules using the objectEnv.
-		adaptedMapForTypeRules := make(map[string]any, len(objMap))
-		for k, val := range objMap {
-			adaptedMapForTypeRules[k] = val // Start with the original value
-			// For type rules, we need to adapt the values *within* the 'self' map.
-			adaptedMapForTypeRules[k] = v.dereferenceAndAdapt(val)
-		}
-		objectVars := map[string]any{"self": adaptedMapForTypeRules}
-
-		for _, rule := range ruleSet.TypeRules {
-			prog, err := v.engine.getProgram(v.objectEnv, rule)
-			if err != nil {
-				v.logger.Error("failed to compile type rule", "rule", rule, "type", typeName, "error", err)
-				*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("type rule compilation error for %s: %s", typeName, err)))
-				continue
+		if objMap != nil {
+			// Apply type rules using the objectEnv.
+			adaptedMapForTypeRules := make(map[string]any, len(objMap))
+			for k, val := range objMap {
+				adaptedMapForTypeRules[k] = val // Start with the original value
+				// For type rules, we need to adapt the values *within* the 'self' map.
+				adaptedMapForTypeRules[k] = v.dereferenceAndAdapt(val)
 			}
+			objectVars := map[string]any{"self": adaptedMapForTypeRules}
 
-			out, _, err := prog.ContextEval(ctx, objectVars)
-			if err != nil {
-				v.logger.Error("failed to evaluate type rule", "rule", rule, "type", typeName, "error", err)
-				*allErrors = append(*allErrors, NewValidationError(typeName, "", fmt.Sprintf("evaluation error: %s", err)))
-				continue
-			}
-
-			if valid, ok := out.Value().(bool); !ok || !valid {
-				*allErrors = append(*allErrors, NewValidationError(typeName, "", rule))
-			}
-		}
-
-		// Apply field rules using the fieldEnv.
-		for fieldName, rules := range ruleSet.FieldRules {
-			// Check for context cancellation before each field validation.
-			select {
-			case <-ctx.Done():
-				*allErrors = append(*allErrors, ctx.Err())
-				return
-			default:
-			}
-
-			fieldVal, ok := objMap[fieldName]
-			if !ok {
-				v.logger.Warn("field not found in adapted map", "field", fieldName, "type", typeName)
-				continue
-			}
-
-			// For field rules, 'self' is the field's value itself.
-			// We adapt it before passing it to CEL.
-			adaptedFieldVal := v.dereferenceAndAdapt(fieldVal)
-			fieldVars := map[string]any{"self": adaptedFieldVal}
-
-			for _, rule := range rules {
-				prog, err := v.engine.getProgram(v.fieldEnv, rule)
+			for _, rule := range ruleSet.TypeRules {
+				prog, err := v.engine.getProgram(v.objectEnv, rule)
 				if err != nil {
-					v.logger.Error("failed to compile field rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-					*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("field rule compilation error for %s.%s: %s", typeName, fieldName, err)))
+					v.logger.Error("failed to compile type rule", "rule", rule, "type", typeName, "error", err)
+					*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("type rule compilation error for %s: %s", typeName, err)))
 					continue
 				}
 
-				out, _, err := prog.ContextEval(ctx, fieldVars)
+				out, _, err := prog.ContextEval(ctx, objectVars)
 				if err != nil {
-					v.logger.Error("failed to evaluate field rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-					*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err)))
+					v.logger.Error("failed to evaluate type rule", "rule", rule, "type", typeName, "error", err)
+					*allErrors = append(*allErrors, NewValidationError(typeName, "", fmt.Sprintf("evaluation error: %s", err)))
 					continue
 				}
 
 				if valid, ok := out.Value().(bool); !ok || !valid {
-					*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, rule))
+					*allErrors = append(*allErrors, NewValidationError(typeName, "", rule))
+				}
+			}
+
+			// Apply field rules using the fieldEnv.
+			for fieldName, rules := range ruleSet.FieldRules {
+				// Check for context cancellation before each field validation.
+				select {
+				case <-ctx.Done():
+					*allErrors = append(*allErrors, ctx.Err())
+					return
+				default:
+				}
+
+				fieldVal, ok := objMap[fieldName]
+				if !ok {
+					v.logger.Warn("field not found in adapted map", "field", fieldName, "type", typeName)
+					continue
+				}
+
+				// For field rules, 'self' is the field's value itself.
+				// We adapt it before passing it to CEL.
+				adaptedFieldVal := v.dereferenceAndAdapt(fieldVal)
+				fieldVars := map[string]any{"self": adaptedFieldVal}
+
+				for _, rule := range rules {
+					prog, err := v.engine.getProgram(v.fieldEnv, rule)
+					if err != nil {
+						v.logger.Error("failed to compile field rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
+						*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("field rule compilation error for %s.%s: %s", typeName, fieldName, err)))
+						continue
+					}
+
+					out, _, err := prog.ContextEval(ctx, fieldVars)
+					if err != nil {
+						v.logger.Error("failed to evaluate field rule", "rule", rule, "type", typeName, "field", fieldName, "error", err)
+						*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err)))
+						continue
+					}
+
+					if valid, ok := out.Value().(bool); !ok || !valid {
+						*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, rule))
+					}
 				}
 			}
 		}
