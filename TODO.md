@@ -104,7 +104,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] 4.2.2: Add `context.Context` to the `Validate` method signature to support timeouts and cancellation.
 
 -   **[x] 4.3: Documentation and Ecosystem**
-    -   [ ] 4.3.1: Create a comprehensive documentation website detailing installation, usage, CLI commands, and all supported rules/shorthands.
+    -   [x] 4.3.1: Create a comprehensive documentation website detailing installation, usage, CLI commands, and all supported rules/shorthands.
     -   [x] 4.3.2: Develop an example project demonstrating integration with a standard `net/http` server.
     -   [x] 4.3.2.1: Show how to decode a JSON request, run validation, and return a structured HTTP 400 error response.
     -   [x] 4.3.2.2: Use `slog` for structured request logging.
