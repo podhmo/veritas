@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,16 +17,19 @@ import (
 func TestUserAPI(t *testing.T) {
 	// setup validator
 	v, err := veritas.NewValidatorFromJSONFile("./rules.json", veritas.WithTypeAdapters(
-		map[string]veritas.TypeAdapter{
-			"http-server.User": func(ob any) (map[string]any, error) {
-				v, ok := ob.(User)
-				if !ok {
-					return nil, nil // a
-				}
-				return map[string]any{
-					"Name":  v.Name,
-					"Email": v.Email,
-				}, nil
+		map[reflect.Type]veritas.TypeAdapterTarget{
+			reflect.TypeOf(User{}): {
+				TargetName: "http-server.User",
+				Adapter: func(ob any) (map[string]any, error) {
+					v, ok := ob.(User)
+					if !ok {
+						return nil, nil // a
+					}
+					return map[string]any{
+						"Name":  v.Name,
+						"Email": v.Email,
+					}, nil
+				},
 			},
 		},
 	))
