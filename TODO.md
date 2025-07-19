@@ -144,7 +144,3 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 - [x] Format the code
 - [x] Run tests
 - [x] Update `TODO.md`
-
----
-- [ ] linter tests are failing. The `veritas-required` analyzer is not being found.
-- [ ] `go test ./...` is failing.
