@@ -167,6 +167,8 @@ For more dynamic environments, you can load validation rules from a JSON file.
 
 For more detailed information, please see the [documentation website](docs/website/index.md).
 
+For a quick reference of common CEL expressions, see the [**CEL Cheatsheet**](docs/website/cel-cheatsheet.md). For a complete guide, please refer to the official [**CEL language definition**](https://github.com/google/cel-spec/blob/master/doc/langdef.md).
+
 ## Contributing
 
 We welcome contributions! Please follow these steps to contribute:
