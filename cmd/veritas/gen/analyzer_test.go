@@ -23,8 +23,8 @@ func TestGenerator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get current directory: %v", err)
 	}
-	t.Setenv("GOPATH", wd)
 	testdata := filepath.Join(wd, "testdata")
+	t.Setenv("GOPATH", testdata)
 	rs := codegentest.Run(t, testdata, gen.Generator, "a")
 	if len(rs) > 0 {
 		for _, r := range rs {
