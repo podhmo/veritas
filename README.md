@@ -1,3 +1,6 @@
+>[!NOTE]
+>This library was created entirely with Jules (AI agent) for experimentation purposes.
+
 # Veritas
 
 Veritas is a dynamic, type-safe, and extensible validation library for Go, powered by Google's Common Expression Language (CEL).
