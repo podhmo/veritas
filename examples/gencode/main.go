@@ -6,14 +6,11 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/google/cel-go/cel"
 	"github.com/podhmo/veritas"
-	_ "github.com/podhmo/veritas/examples/gencode/def"
+	"github.com/podhmo/veritas/examples/gencode/def"
+	_ "github.com/podhmo/veritas/examples/gencode/validation"
 )
-
-type User struct {
-	Name  string
-	Email string
-}
 
 func main() {
 	if err := run(); err != nil {
@@ -24,11 +21,16 @@ func main() {
 
 func run() error {
 	ctx := context.Background()
+	engine, err := veritas.NewEngine(slog.Default(), append(veritas.DefaultFunctions(), cel.StdLib())...)
+	if err != nil {
+		return fmt.Errorf("failed to create engine: %w", err)
+	}
 	v, err := veritas.NewValidator(
+		veritas.WithEngine(engine),
 		veritas.WithTypeAdapters(
 			map[string]veritas.TypeAdapter{
-				"def.User": func(ob any) (map[string]any, error) {
-					v, ok := ob.(User)
+				"github.com/podhmo/veritas/examples/gencode/def.User": func(ob any) (map[string]any, error) {
+					v, ok := ob.(def.User)
 					if !ok {
 						return nil, fmt.Errorf("unexpected type %T", ob)
 					}
@@ -39,9 +41,6 @@ func run() error {
 				},
 			},
 		),
-		veritas.WithTypeNames(map[string]string{
-			"gencode.User": "def.User",
-		}),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create validator: %w", err)
@@ -49,7 +48,7 @@ func run() error {
 
 	// valid
 	{
-		user := User{Name: "foo", Email: "foo@example.com"}
+		user := def.User{Name: "foo", Email: "foo@example.com"}
 		if err := v.Validate(ctx, user); err != nil {
 			return fmt.Errorf("validation failed, unexpectedly: %+v", err)
 		}
@@ -58,7 +57,7 @@ func run() error {
 
 	// invalid
 	{
-		user := User{Name: "foo", Email: "foo"}
+		user := def.User{Name: "foo", Email: "foo"}
 		if err := v.Validate(ctx, user); err != nil {
 			slog.Info("validation failed, as expected", "user", user, "err", err)
 		} else {
