@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"reflect"
 
 	"github.com/podhmo/veritas"
 )
@@ -34,16 +35,19 @@ func run(ctx context.Context) error {
 	slog.InfoContext(ctx, "setup validator")
 	provider := veritas.NewBytesRuleProvider(rulesJSON)
 	v, err := veritas.NewValidator(veritas.WithRuleProvider(provider), veritas.WithTypeAdapters(
-		map[string]veritas.TypeAdapter{
-			"http-server.User": func(ob any) (map[string]any, error) {
-				v, ok := ob.(User)
-				if !ok {
-					return nil, errors.New("unexpected type")
-				}
-				return map[string]any{
-					"Name":  v.Name,
-					"Email": v.Email,
-				}, nil
+		map[reflect.Type]veritas.TypeAdapterTarget{
+			reflect.TypeOf(User{}): {
+				TargetName: "http-server.User",
+				Adapter: func(ob any) (map[string]any, error) {
+					v, ok := ob.(User)
+					if !ok {
+						return nil, errors.New("unexpected type")
+					}
+					return map[string]any{
+						"Name":  v.Name,
+						"Email": v.Email,
+					}, nil
+				},
 			},
 		},
 	))
