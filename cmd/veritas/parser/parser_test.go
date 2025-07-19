@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/podhmo/veritas"
-	"golang.org/x/tools/go/packages"
 )
 
 func TestParser(t *testing.T) {
@@ -97,36 +96,14 @@ func TestParser(t *testing.T) {
 			},
 		}
 
-		// Load package info for the test data
-		cfg := &packages.Config{
-			Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
-		}
-		pkgs, err := packages.Load(cfg, "github.com/podhmo/veritas/testdata/sources")
+		// Parse the directory containing the test file.
+		got, err := p.Parse("github.com/podhmo/veritas/testdata/sources")
 		if err != nil {
-			t.Fatalf("failed to load packages: %v", err)
-		}
-		if packages.PrintErrors(pkgs) > 0 {
-			t.Fatalf("errors occurred while loading packages")
-		}
-		if len(pkgs) != 1 {
-			t.Fatalf("expected 1 package, got %d", len(pkgs))
-		}
-		pkg := pkgs[0]
-
-		info := PackageInfo{
-			PkgPath:   pkg.PkgPath,
-			Syntax:    pkg.Syntax,
-			TypesInfo: pkg.TypesInfo,
-			Types:     pkg.Types,
-		}
-
-		got, err := p.ParseDirectly(info)
-		if err != nil {
-			t.Fatalf("ParseDirectly() error = %v, want nil", err)
+			t.Fatalf("Parse() error = %v, want nil", err)
 		}
 
 		if diff := cmp.Diff(want, got); diff != "" {
-			t.Errorf("ParseDirectly() mismatch (-want +got):\n%s", diff)
+			t.Errorf("Parse() mismatch (-want +got):\n%s", diff)
 		}
 	})
 }

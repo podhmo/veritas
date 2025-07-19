@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/podhmo/veritas"
+	"golang.org/x/tools/go/packages"
 )
 
 // PackageInfo contains the necessary information from a package for parsing.
@@ -44,6 +45,39 @@ type Parser struct {
 
 func NewParser(logger *slog.Logger) *Parser {
 	return &Parser{logger: logger}
+}
+
+func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error) {
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+	}
+	pkgs, err := packages.Load(cfg, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load packages: %w", err)
+	}
+	if packages.PrintErrors(pkgs) > 0 {
+		return nil, fmt.Errorf("errors occurred while loading packages")
+	}
+
+	ruleSets := make(map[string]veritas.ValidationRuleSet)
+
+	for _, pkg := range pkgs {
+		info := PackageInfo{
+			PkgPath:   pkg.PkgPath,
+			Syntax:    pkg.Syntax,
+			TypesInfo: pkg.TypesInfo,
+			Types:     pkg.Types,
+		}
+		rules, err := p.ParseDirectly(info)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse directly for package %s: %w", pkg.PkgPath, err)
+		}
+		for k, v := range rules {
+			ruleSets[k] = v
+		}
+	}
+
+	return ruleSets, nil
 }
 
 // ParseDirectly parses validation rules from the given package information

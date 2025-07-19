@@ -148,12 +148,5 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 ## Phase 7: Refactoring and Performance Tuning
 
-- [x] `docs/analyzer-tuning.md` の指針に従ってリファクタリングする
-  - [x] `parser` パッケージに `PackageInfo` 構造体を定義する
-  - [x] `parser` パッケージに `ParseDirectly` 関数を実装する
-  - [x] `parser` パッケージの内部ヘルパー関数 (`extractRulesForStruct`, `getEmbeddedStruct`) をリファクタリングする
-  - [x] `gen` パッケージの `run` 関数を更新して `ParseDirectly` を使用するようにする
-  - [x] 古い `Parse` 関数を削除する
-  - [x] `go test ./...` を実行してすべてのテストが成功することを確認する
-  - [x] `goimports` を実行してコードをフォーマットする
-  - [x] `TODO.md` を更新する
+- [x] Refactor the analyzer for performance based on `docs/analyzer-tuning.md`.
+  - This involved creating `parser.PackageInfo` to avoid redundant package loading by `veritas-gen`, updating the parser to use it, while keeping the original `Parse` method for backward compatibility.
