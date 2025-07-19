@@ -19,5 +19,15 @@ func TestMain(m *testing.M) {
 
 func TestGenerator(t *testing.T) {
 	rs := codegentest.Run(t, codegentest.TestData(), gen.Generator, "a")
+	if len(rs) > 0 {
+		for _, r := range rs {
+			if r.Err != nil {
+				t.Errorf("unexpected error: %v", r.Err)
+			}
+			if r.Output != nil {
+				t.Log(r.Output.String())
+			}
+		}
+	}
 	codegentest.Golden(t, rs, flagUpdate)
 }

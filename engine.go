@@ -19,7 +19,9 @@ type Engine struct {
 // NewEngine creates a new validation engine.
 func NewEngine(logger *slog.Logger, funcs ...cel.EnvOption) (*Engine, error) {
 	// Add support for common CEL features.
-	opts := append(funcs, cel.HomogeneousAggregateLiterals())
+	opts := DefaultEnvOptions()
+	opts = append(opts, funcs...)
+	opts = append(opts, cel.HomogeneousAggregateLiterals())
 
 	cache, err := lru.New[string, cel.Program](256)
 	if err != nil {
