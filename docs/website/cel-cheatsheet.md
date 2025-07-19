@@ -56,8 +56,8 @@ When validating a struct, `self` refers to the struct instance. You can access i
 ```go
 // @cel: self.Password == self.PasswordConfirm
 type User struct {
-    Password        string `validate:"required"`
-    PasswordConfirm string `validate:"required"`
+    Password        string `validate:"nonzero"`
+    PasswordConfirm string `validate:"nonzero"`
 }
 ```
 
@@ -67,7 +67,7 @@ When using `validate` tags, `self` refers to the field's value.
 
 ```go
 type Product struct {
-    Name  string `validate:"required,cel:self.size() < 50"`
+    Name  string `validate:"nonzero,cel:self.size() < 50"`
     Price int    `validate:"cel:self > 0"`
 }
 ```

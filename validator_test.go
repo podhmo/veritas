@@ -236,7 +236,7 @@ func TestValidator_Validate(t *testing.T) {
 				Name:  "", // Fails nonzero
 				Email: "invalid-email",
 				Age:   20,
-				ID:    intPtr(1),
+				ID:    nil, // Fails required
 			},
 			ctx:          context.Background(),
 			wantErr:      errors.New("multiple errors expected"),
@@ -281,7 +281,7 @@ func TestValidator_Validate(t *testing.T) {
 			name: "invalid own struct field with embedded",
 			obj: &sources.EmbeddedUser{
 				Base: sources.Base{ID: "ab"},
-				Name: "", // Fails required check
+				Name: "", // Fails nonzero check
 			},
 			ctx:     context.Background(),
 			wantErr: NewValidationError("sources.EmbeddedUser", "Name", `self != ""`),
@@ -475,11 +475,15 @@ func TestValidator_Validate(t *testing.T) {
 				case "object with multiple errors":
 					nameRuleError := NewValidationError("sources.MockUser", "Name", `self != ""`).Error()
 					emailRuleError := NewValidationError("sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`).Error()
+					idRuleError := NewValidationError("sources.MockUser", "ID", `self != null`).Error()
 					if !strings.Contains(errStr, nameRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", nameRuleError, errStr)
 					}
 					if !strings.Contains(errStr, emailRuleError) {
 						t.Errorf("Validate() error missing expected content '%s' in '%s'", emailRuleError, errStr)
+					}
+					if !strings.Contains(errStr, idRuleError) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", idRuleError, errStr)
 					}
 				case "invalid struct in slice":
 					handleRuleError := NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`).Error()

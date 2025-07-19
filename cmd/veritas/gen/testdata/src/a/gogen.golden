@@ -11,7 +11,7 @@ func init() {
 		},
 		FieldRules: map[string][]string{
 			"Email": {
-				`self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`,
+				`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`,
 			},
 			"Name": {
 				`self != ""`,

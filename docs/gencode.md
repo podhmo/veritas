@@ -17,9 +17,9 @@ package models
 // @cel: self.Password == self.PasswordConfirm
 type User struct {
     Name     string `validate:"required,cel:self.size() < 50"`
-    Age      int    `validate:"cel:self >= 18"`
-    Password string `validate:"required"`
-    PasswordConfirm string `validate:"required"`
+    Name     string `validate:"nonzero,cel:self.size() < 50"`
+    Password string `validate:"nonzero"`
+    PasswordConfirm string `validate:"nonzero"`
 }
 ```
 

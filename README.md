@@ -34,11 +34,11 @@ The recommended approach is to use Go code generation for a type-safe, high-perf
 
     // @cel: self.Password == self.PasswordConfirm
     type User struct {
-        Name     string `validate:"required,cel:self.size() < 50"`
-        Email    string `validate:"required,email"`
+        Name     string `validate:"nonzero,cel:self.size() < 50"`
+        Email    string `validate:"nonzero,email"`
         Age      int    `validate:"cel:self >= 18"`
-        Password string `validate:"required,cel:self.size() >= 10"`
-        PasswordConfirm string `validate:"required"`
+        Password string `validate:"nonzero,cel:self.size() >= 10"`
+        PasswordConfirm string `validate:"nonzero"`
     }
     ```
 
