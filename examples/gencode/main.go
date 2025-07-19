@@ -39,9 +39,6 @@ func run() error {
 				},
 			},
 		),
-		veritas.WithTypeNames(map[string]string{
-			"gencode.User": "def.User",
-		}),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create validator: %w", err)
