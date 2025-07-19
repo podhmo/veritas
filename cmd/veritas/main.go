@@ -5,7 +5,9 @@ import (
 
 	"github.com/gostaticanalysis/codegen/singlegenerator"
 	"github.com/podhmo/veritas/cmd/veritas/gen"
-	lintcmd "github.com/podhmo/veritas/cmd/veritas/lint"
+	"github.com/podhmo/veritas/lint"
+	"github.com/podhmo/veritas/lint/required"
+	"golang.org/x/tools/go/analysis/multichecker"
 )
 
 func main() {
@@ -14,7 +16,10 @@ func main() {
 	flag.Parse()
 
 	if lintFlag {
-		lintcmd.Main()
+		multichecker.Main(
+			lint.Analyzer,
+			required.Analyzer,
+		)
 		return
 	}
 

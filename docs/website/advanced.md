@@ -12,7 +12,7 @@ Converts a string to uppercase.
 ```go
 // @cel: strings.ToUpper(self.CountryCode) == "US"
 type Address struct {
-    CountryCode string `validate:"required"`
+    CountryCode string `validate:"nonzero"`
 }
 ```
 

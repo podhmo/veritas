@@ -4,8 +4,8 @@ Veritas uses struct tags to define validation rules. The `validate` tag contains
 
 ```go
 type User struct {
-    Name  string `validate:"required,cel:self.size() < 50"`
-    Email string `validate:"required,email"`
+    Name  string `validate:"nonzero,cel:self.size() < 50"`
+    Email string `validate:"nonzero,email"`
     Age   int    `validate:"cel:self >= 18"`
 }
 ```
@@ -17,8 +17,8 @@ You can also define rules that apply to the entire struct using a special `// @c
 ```go
 // @cel: self.Password == self.PasswordConfirm
 type User struct {
-    Password        string `validate:"required"`
-    PasswordConfirm string `validate:"required"`
+    Password        string `validate:"nonzero"`
+    PasswordConfirm string `validate:"nonzero"`
 }
 ```
 
@@ -30,8 +30,8 @@ Veritas provides several shorthands for common validation scenarios.
 
 | Shorthand  | Description                                                                                             | Applicable Types                        |
 | :--------- | :------------------------------------------------------------------------------------------------------ | :-------------------------------------- |
-| `required` | The value must not be the zero value for its type (e.g., not `""`, not `nil`, not an empty slice/map). | `string`, pointers, slices, maps        |
-| `nonzero`  | Similar to `required`, but also asserts `true` for booleans.                                            | `string`, numeric types, pointers, bool |
+| `required` | Asserts that a pointer is not `nil`.                                                                       | pointers                                |
+| `nonzero`  | Asserts that a value is not its zero value (e.g., not `""`, `0`, `false`, `nil`, or an empty slice/map). | `string`, numeric types, pointers, bool, slices, maps |
 | `email`    | The string must match a basic email format.                                                             | `string`                                |
 
 ### Raw CEL Expressions
@@ -54,7 +54,7 @@ To validate the elements of slices or maps, you can use the `dive`, `keys`, and 
 
 | Keyword  | Description                                        | Example                                               |
 | :------- | :------------------------------------------------- | :---------------------------------------------------- |
-| `dive`   | Applies rules to each element of a slice.          | `validate:"dive,required"` (each element must be set) |
+| `dive`   | Applies rules to each element of a slice.          | `validate:"dive,nonzero"` (each element must not be its zero value) |
 | `keys`   | Applies rules to each key of a map.                | `validate:"keys,cel:self.size() > 3"` (each key > 3 chars) |
 | `values` | Applies rules to each value of a map.              | `validate:"values,nonzero"` (each value must be non-zero) |
 

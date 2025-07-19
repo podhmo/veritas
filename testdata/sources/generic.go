@@ -6,5 +6,5 @@ type Box[T any] struct {
 }
 
 type Item struct {
-	Name string `validate:"required"`
+	Name string `validate:"nonzero"`
 }

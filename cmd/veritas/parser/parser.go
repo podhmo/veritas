@@ -15,10 +15,7 @@ import (
 
 var shorthandCELMap = map[string]any{
 	"required": map[string]string{
-		"string": `self != ""`,
-		"ptr":    "self != null",
-		"slice":  "self.size() > 0",
-		"map":    "self.size() > 0",
+		"ptr": "self != null",
 	},
 	"nonzero": map[string]string{
 		"string": `self != ""`,

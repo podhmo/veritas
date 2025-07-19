@@ -1,5 +1,5 @@
 package main
 
 type User struct {
-	Name string `validate:"required"`
+	Name string `validate:"nonzero"`
 }

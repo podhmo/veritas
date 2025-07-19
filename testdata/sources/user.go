@@ -42,7 +42,7 @@ type MockComplexData struct {
 type MockMoreComplexData struct {
 	// A slice of maps. Validate that each map is not nil, each key is a valid email,
 	// and each value is not an empty string.
-	ListOfMaps []map[string]string `validate:"dive,required,keys,email,values,nonzero"`
+	ListOfMaps []map[string]string `validate:"dive,nonzero,keys,email,values,nonzero"`
 
 	// A map with slice values. Validate that each key is not empty,
 	// and that each string within the nested slice is not empty.
@@ -50,27 +50,27 @@ type MockMoreComplexData struct {
 }
 
 type Base struct {
-	ID string `validate:"required,cel:self.size() > 1"`
+	ID string `validate:"nonzero,cel:self.size() > 1"`
 }
 
 type EmbeddedUser struct {
 	Base
-	Name string `validate:"required"`
+	Name string `validate:"nonzero"`
 }
 
 type ComplexUser struct {
-	Name     string `validate:"required"`
+	Name     string `validate:"nonzero"`
 	Scores   []int  `validate:"cel:self.all(x, x >= 0)"`
 	Metadata map[string]string
 }
 
 type Profile struct {
-	Platform string `validate:"required"`
-	Handle   string `validate:"required,cel:self.size() > 2"`
+	Platform string `validate:"nonzero"`
+	Handle   string `validate:"nonzero,cel:self.size() > 2"`
 }
 
 type UserWithProfiles struct {
-	Name     string             `validate:"required"`
+	Name     string             `validate:"nonzero"`
 	Profiles []Profile          // Slice of structs
 	Contacts map[string]Profile // Map of structs
 }
