@@ -34,11 +34,18 @@ func run(pass *codegen.Pass) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil)) // Create a logger
 	p := parser.NewParser(logger)
 
-	pkgPath := pass.Pkg.Path()
+	// Create the PackageInfo struct from the pass
+	info := parser.PackageInfo{
+		PkgPath:   pass.Pkg.Path(),
+		Syntax:    pass.Files,
+		TypesInfo: pass.TypesInfo,
+		Types:     pass.Pkg,
+	}
 
-	ruleSets, err := p.Parse(pkgPath)
+	// Call the new direct parsing function
+	ruleSets, err := p.ParseDirectly(info)
 	if err != nil {
-		return fmt.Errorf("failed to parse: %w", err)
+		return fmt.Errorf("failed to parse directly: %w", err)
 	}
 
 	if len(ruleSets) == 0 {

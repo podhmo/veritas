@@ -145,3 +145,15 @@ This document outlines the detailed, phased development plan for the "Veritas" v
   - [x] The `gencode.User` type needs to be correctly mapped to the `def.User` validation rules.
   - [x] **NOTE:** This is now fixed. The validator now uses a `TypeAdapterTarget` to correctly map types to their validation rules.
 - [x] Remove the `run.go` file from the `gencode` example.
+
+## Phase 7: Refactoring and Performance Tuning
+
+- [x] `docs/analyzer-tuning.md` の指針に従ってリファクタリングする
+  - [x] `parser` パッケージに `PackageInfo` 構造体を定義する
+  - [x] `parser` パッケージに `ParseDirectly` 関数を実装する
+  - [x] `parser` パッケージの内部ヘルパー関数 (`extractRulesForStruct`, `getEmbeddedStruct`) をリファクタリングする
+  - [x] `gen` パッケージの `run` 関数を更新して `ParseDirectly` を使用するようにする
+  - [x] 古い `Parse` 関数を削除する
+  - [x] `go test ./...` を実行してすべてのテストが成功することを確認する
+  - [x] `goimports` を実行してコードをフォーマットする
+  - [x] `TODO.md` を更新する

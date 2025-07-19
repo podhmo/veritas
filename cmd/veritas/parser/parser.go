@@ -10,8 +10,16 @@ import (
 	"strings"
 
 	"github.com/podhmo/veritas"
-	"golang.org/x/tools/go/packages"
 )
+
+// PackageInfo contains the necessary information from a package for parsing.
+// It is constructed in the gen package from a *codegen.Pass.
+type PackageInfo struct {
+	PkgPath   string
+	Syntax    []*ast.File
+	TypesInfo *types.Info
+	Types     *types.Package
+}
 
 var shorthandCELMap = map[string]any{
 	"required": map[string]string{
@@ -38,95 +46,81 @@ func NewParser(logger *slog.Logger) *Parser {
 	return &Parser{logger: logger}
 }
 
-func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error) {
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
-	}
-	pkgs, err := packages.Load(cfg, path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load packages: %w", err)
-	}
-	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("errors occurred while loading packages")
-	}
-
+// ParseDirectly parses validation rules from the given package information
+// without loading packages itself.
+func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationRuleSet, error) {
 	ruleSets := make(map[string]veritas.ValidationRuleSet)
 
-	for _, pkg := range pkgs {
-		for _, f := range pkg.Syntax {
-			ast.Inspect(f, func(n ast.Node) bool {
-				genDecl, ok := n.(*ast.GenDecl)
-				if !ok || genDecl.Tok != token.TYPE {
-					return true
+	for _, f := range info.Syntax {
+		ast.Inspect(f, func(n ast.Node) bool {
+			genDecl, ok := n.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				return true
+			}
+
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok {
+					continue
 				}
 
-				for _, spec := range genDecl.Specs {
-					typeSpec, ok := spec.(*ast.TypeSpec)
-					if !ok {
-						continue
-					}
-					structType, ok := typeSpec.Type.(*ast.StructType)
-					if !ok {
-						continue
-					}
+				var structNameBuilder strings.Builder
+				structNameBuilder.WriteString(typeSpec.Name.Name)
 
-					var structNameBuilder strings.Builder
-					structNameBuilder.WriteString(typeSpec.Name.Name)
-
-					if typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0 {
-						structNameBuilder.WriteString("[")
-						for i, p := range typeSpec.TypeParams.List {
-							if i > 0 {
+				if typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0 {
+					structNameBuilder.WriteString("[")
+					for i, p := range typeSpec.TypeParams.List {
+						if i > 0 {
+							structNameBuilder.WriteString(", ")
+						}
+						// p.Names is a list of identifiers, e.g., "T" in T any
+						for j, name := range p.Names {
+							if j > 0 {
 								structNameBuilder.WriteString(", ")
 							}
-							// p.Names is a list of identifiers, e.g., "T" in T any
-							for j, name := range p.Names {
-								if j > 0 {
-									structNameBuilder.WriteString(", ")
-								}
-								structNameBuilder.WriteString(name.Name)
-							}
-						}
-						structNameBuilder.WriteString("]")
-					}
-					structName := structNameBuilder.String()
-
-					ruleSet := veritas.ValidationRuleSet{
-						FieldRules: make(map[string][]string),
-					}
-
-					if doc := genDecl.Doc; doc != nil {
-						for _, comment := range doc.List {
-							if strings.HasPrefix(comment.Text, "// @cel:") {
-								rule := strings.TrimSpace(strings.TrimPrefix(comment.Text, "// @cel:"))
-								ruleSet.TypeRules = append(ruleSet.TypeRules, rule)
-							}
+							structNameBuilder.WriteString(name.Name)
 						}
 					}
+					structNameBuilder.WriteString("]")
+				}
+				structName := structNameBuilder.String()
 
-					p.extractRulesForStruct(pkg, structType, &ruleSet)
+				ruleSet := veritas.ValidationRuleSet{
+					FieldRules: make(map[string][]string),
+				}
 
-					if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
-						// Use PkgPath instead of Name to get a unique identifier for the package,
-						// especially crucial for the `main` package.
-						fullTypeName := fmt.Sprintf("%s.%s", pkg.PkgPath, structName)
-						ruleSets[fullTypeName] = ruleSet
+				if doc := genDecl.Doc; doc != nil {
+					for _, comment := range doc.List {
+						if strings.HasPrefix(comment.Text, "// @cel:") {
+							rule := strings.TrimSpace(strings.TrimPrefix(comment.Text, "// @cel:"))
+							ruleSet.TypeRules = append(ruleSet.TypeRules, rule)
+						}
 					}
 				}
-				return true
-			})
-		}
+				p.extractRulesForStruct(info, structType, &ruleSet)
+
+				if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
+					fullTypeName := fmt.Sprintf("%s.%s", info.PkgPath, structName)
+					ruleSets[fullTypeName] = ruleSet
+				}
+			}
+			return true
+		})
 	}
 
 	return ruleSets, nil
 }
 
-func (p *Parser) extractRulesForStruct(pkg *packages.Package, structType *ast.StructType, ruleSet *veritas.ValidationRuleSet) {
+func (p *Parser) extractRulesForStruct(info PackageInfo, structType *ast.StructType, ruleSet *veritas.ValidationRuleSet) {
 	for _, field := range structType.Fields.List {
 		// Embedded field
 		if field.Names == nil {
-			if embeddedStruct, ok := p.getEmbeddedStruct(pkg, field.Type); ok {
-				p.extractRulesForStruct(pkg, embeddedStruct, ruleSet)
+			if embeddedStruct, ok := p.getEmbeddedStruct(info, field.Type); ok {
+				p.extractRulesForStruct(info, embeddedStruct, ruleSet)
 			}
 			continue
 		}
@@ -141,7 +135,7 @@ func (p *Parser) extractRulesForStruct(pkg *packages.Package, structType *ast.St
 			continue
 		}
 
-		tv := pkg.TypesInfo.TypeOf(field.Type)
+		tv := info.TypesInfo.TypeOf(field.Type)
 		if tv == nil {
 			p.logger.Warn("could not determine type for field", "field", fieldName)
 			continue
@@ -159,8 +153,8 @@ func (p *Parser) extractRulesForStruct(pkg *packages.Package, structType *ast.St
 	}
 }
 
-func (p *Parser) getEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (*ast.StructType, bool) {
-	typeOf := pkg.TypesInfo.TypeOf(expr)
+func (p *Parser) getEmbeddedStruct(info PackageInfo, expr ast.Expr) (*ast.StructType, bool) {
+	typeOf := info.TypesInfo.TypeOf(expr)
 	if typeOf == nil {
 		return nil, false
 	}
@@ -171,14 +165,14 @@ func (p *Parser) getEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (*ast.S
 	}
 
 	obj := named.Obj()
-	if obj == nil || obj.Pkg() != pkg.Types {
+	if obj == nil || obj.Pkg() != info.Types {
 		// Not defined in the same package, handling this would require finding the package and file.
 		// For now, we only support embedded structs from the same package.
 		return nil, false
 	}
 
 	// Find the AST node for the type definition
-	for _, f := range pkg.Syntax {
+	for _, f := range info.Syntax {
 		for _, decl := range f.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
 			if !ok || genDecl.Tok != token.TYPE {
