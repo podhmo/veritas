@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gostaticanalysis/codegen/codegentest"
 	"github.com/podhmo/veritas/cmd/veritas/gen"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/analysistest"
@@ -26,68 +27,16 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// NEED: GOWORK=off if go.work is existed in toplevel
 func TestGenerator(t *testing.T) {
-	// This is a workaround for the fact that codegentest is broken.
-	buf := new(bytes.Buffer)
-	gen.Generator.Output = func(pkg *types.Package) io.Writer {
-		return buf
-	}
-
-	if err := doGenerate(
-		analysistest.TestData()+"/src",
-		gen.Generator.ToAnalyzer(),
-		[]string{"./a"},
-	); err != nil {
-		t.Fatalf("failed to generate code: %v", err)
-	}
-
-	goldenFile := filepath.Join(analysistest.TestData(), "src/a/gogen.golden")
-	if flagUpdate { // update golden file if -update flag is set
-		if err := os.WriteFile(goldenFile, buf.Bytes(), 0644); err != nil {
-			t.Fatalf("failed to write golden file: %v", err)
+	rs := codegentest.Run(t, codegentest.TestData(), gen.Generator, "a")
+	for _, r := range rs {
+		if r.Err != nil {
+			t.Errorf("failed to generate code: %v", r.Err)
 		}
-	} else {
-		golden, err := os.ReadFile(goldenFile)
-		if err != nil {
-			t.Fatalf("failed to read golden file: %v", err)
-		}
-		want, got := strings.TrimSpace(string(golden)), strings.TrimSpace(buf.String())
-		if want != got {
-			t.Errorf("output does not match golden file:\nwant:\n%s\ngot:\n%s", want, got)
+		if r.Output != nil {
+			t.Log(r.Output.String())
 		}
 	}
-}
-
-// codegentest is broken, so we use individual code.
-func doGenerate(dir string, an *analysis.Analyzer, patterns []string) error {
-	mode := packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports |
-		packages.NeedTypes | packages.NeedTypesSizes | packages.NeedSyntax | packages.NeedTypesInfo |
-		packages.NeedDeps | packages.NeedModule
-	cfg := &packages.Config{
-		Mode:  mode,
-		Dir:   dir,
-		Tests: true,
-		Env:   os.Environ(),
-	}
-	pkgs, err := packages.Load(cfg, patterns...)
-	if err != nil {
-		return fmt.Errorf("failed to load packages: %w", err)
-	}
-
-	for _, pkg := range pkgs {
-		if pkg.Name == "" {
-			return fmt.Errorf("failed to load %q: Errors=%v", pkg.PkgPath, pkg.Errors)
-		}
-	}
-
-	if len(pkgs) == 0 {
-		return fmt.Errorf("no packages matched %s", patterns)
-	}
-
-	_, err = checker.Analyze([]*analysis.Analyzer{an}, pkgs, nil)
-	if err != nil {
-		return fmt.Errorf("failed to analyze packages: %w", err)
-	}
-
-	return nil
+	codegentest.Golden(t, rs, flagUpdate)
 }
