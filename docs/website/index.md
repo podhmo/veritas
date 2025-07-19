@@ -10,4 +10,9 @@ Veritas helps you ensure your data is correct and conforms to your business rule
 *   **[Installation](./installation.md)**: How to install the Veritas library and CLI tool.
 *   **[CLI Reference](./cli.md)**: Detailed documentation for the `veritas` command-line interface.
 *   **[Rules Reference](./rules.md)**: A complete reference of all built-in validation rules, shorthands, and keywords.
+*   **[CEL Cheatsheet](./cel-cheatsheet.md)**: A quick reference for common CEL expressions.
 *   **[Advanced Topics](./advanced.md)**: Learn about custom functions and other advanced features.
+
+---
+
+For more in-depth information about CEL, please refer to the official [**CEL language definition**](https://github.com/google/cel-spec/blob/master/doc/langdef.md).
