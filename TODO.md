@@ -139,8 +139,6 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 ## Phase 6: Additional Tasks
 
-- [x] Embed `rules.json` in `main.go`
-- [x] Update `run` function to use embedded data
-- [x] Format the code
-- [x] Run tests
-- [x] Update `TODO.md`
+- [ ] Fix the `gencode` example
+  - [ ] The `gencode.User` type needs to be correctly mapped to the `def.User` validation rules.
+- [ ] Remove the `run.go` file from the `gencode` example.
