@@ -2,9 +2,9 @@ package gen_test
 
 import (
 	"flag"
-	"go/build"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gostaticanalysis/codegen/codegentest"
@@ -19,16 +19,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// NEED: GOWORK=off if go.work is existed in toplevel
 func TestGenerator(t *testing.T) {
-	dir := codegentest.TestData()
+	dir := filepath.Join(codegentest.TestData(), "src")
+	rs := codegentest.Run(t, dir, gen.Generator, "testpkg/a")
 
-	os.Setenv("GOMODCACHE", filepath.Join(build.Default.GOPATH, "pkg", "mod"))
-	os.Setenv("GO111MODULE", "off")
-	os.Setenv("GOPATH", dir) // ensure GOPATH is set
-
-	rs := codegentest.Run(t, dir, gen.Generator, "a")
 	for _, r := range rs {
+		r.Dir = strings.Replace(r.Dir, "src/src/testpkg", "src", 1) // workaround for codegentest
+
 		if r.Err != nil {
 			t.Errorf("failed to generate code: %v", r.Err)
 		}
@@ -36,5 +33,6 @@ func TestGenerator(t *testing.T) {
 			t.Log(r.Output.String())
 		}
 	}
+
 	codegentest.Golden(t, rs, flagUpdate)
 }
