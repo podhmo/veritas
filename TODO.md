@@ -158,7 +158,8 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   [ ] **8.1: Modify `NewValidator` to Accept Types**:
     -   [ ] Create a new `ValidatorOption` called `WithTypes(types ...any)`.
     -   [ ] This option will take a variadic list of Go struct instances (e.g., `User{}`, `Post{}`).
-    -   [ ] Inside `NewValidator`, collect these types and use them to create a new `cel.Env` with the `cel.Types()` option. This new environment should be used for object-level validations.
+    -   [ ] Inside `NewValidator`, collect the `reflect.TypeOf()` for each provided struct instance.
+    -   [ ] Use these types to create a new `cel.Env` with the `ext.NativeTypes()` option. This new environment will be used for all validations, replacing the adapter-based approach.
 
 -   [ ] **8.2: Deprecate and Remove `TypeAdapter`**:
     -   [ ] Remove the `TypeAdapterFunc`, `TypeAdapterTarget`, and the `adapters` map from the `Validator` struct.

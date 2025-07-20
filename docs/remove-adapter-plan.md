@@ -19,20 +19,29 @@ The `veritas` library currently uses a `TypeAdapter` pattern to bridge the gap b
 2.  **Complexity**: The presence of adapters adds a layer of indirection to the validation logic, making the codebase harder to understand and maintain.
 3.  **Performance**: The conversion from a struct to a map at runtime introduces a performance overhead that could be avoided.
 
-## 2. The Solution: Native Go Structs in CEL
+## 2. The Solution: Native Go Structs in CEL with `ext.NativeTypes`
 
-The `cel-go` library (especially in versions >= `v0.11.0`) provides a mechanism to work directly with native Go structs. This eliminates the need for the struct-to-map conversion and, therefore, the `TypeAdapter`.
+The initial assumption that `cel.Types()` could be used for arbitrary Go structs was incorrect. `cel.Types()` is primarily designed for Protobuf messages. The correct way to enable `cel-go` to work directly with native Go structs is by using the `ext.NativeTypes()` extension. This extension registers Go structs with the CEL type system, eliminating the need for the manual struct-to-map conversion and, therefore, the `TypeAdapter`.
 
-The key is the `cel.Types()` option, which can be passed to `cel.NewEnv()`.
+### How `ext.NativeTypes` Works
+
+The `ext.NativeTypes()` function, when passed to `cel.NewEnv()`, enables CEL to understand and access fields on Go structs directly. It requires the `reflect.TypeOf()` of the struct you want to register.
 
 ```go
+import (
+    "reflect"
+    "github.com/google/cel-go/cel"
+    "github.com/google/cel-go/ext"
+)
+
 // Example of registering a Go struct with CEL
 env, err := cel.NewEnv(
-    cel.Types(&my_package.MyStruct{}),
+    ext.NativeTypes(reflect.TypeOf(&my_package.MyStruct{})),
+    cel.Variable("self", cel.ObjectType("my_package.MyStruct")),
 )
 ```
 
-By registering the Go struct types with the CEL environment, we can pass the struct instances directly to the `program.Eval()` function. CEL will then be able to access the struct fields by name, just as it would with a map.
+By registering the Go struct types with the CEL environment using `ext.NativeTypes`, we can pass struct instances directly to the `program.Eval()` function. CEL will then be able to access the struct fields by name.
 
 ## 3. The Plan to Remove the Adapter
 
@@ -41,7 +50,8 @@ The user has requested that I only create this document. The following is a prop
 1.  **Modify `NewValidator` to Accept Types**:
     -   Create a new `ValidatorOption` called `WithTypes(types ...any)`.
     -   This option will take a variadic list of Go struct instances (e.g., `User{}`, `Post{}`).
-    -   Inside `NewValidator`, collect these types and use them to create a new `cel.Env` with the `cel.Types()` option. This new environment should be used for object-level validations.
+    -   Inside `NewValidator`, collect the `reflect.TypeOf()` for each provided struct instance.
+    -   Use these types to create a new `cel.Env` with the `ext.NativeTypes()` option. This new environment will be used for all validations, replacing the adapter-based approach.
 
 2.  **Deprecate and Remove `TypeAdapter`**:
     -   Remove the `TypeAdapterFunc`, `TypeAdapterTarget`, and the `adapters` map from the `Validator` struct.
