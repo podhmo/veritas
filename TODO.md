@@ -157,3 +157,17 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   [x] **Summary**: Introduced a `WithTypes(...)` option to `NewValidator` to register Go structs directly with the `cel-go` environment. This is now the recommended approach. The `veritas-gen` tool was updated to generate a `GetKnownTypes()` function, making it easy to register all relevant types. The documentation and examples (`http-server`, `gencode`) have been updated to reflect this new, simpler API.
 -   **[NOTE]** The `TypeAdapter` pattern is retained as a legacy fallback for complex generic type scenarios where `cel-go`'s native support has limitations. Full native support for generics remains a challenge due to the static nature of CEL's type checking. Rules for generic types must be written to be compatible with all possible type instantiations.
+
+## Phase 9: One-File Code Injection
+
+**Goal**: Add the ability to inject or update a `setupValidation` function in a single Go file.
+
+- [ ] Implement the `-inject` flag in `cmd/veritas`.
+- [ ] Implement the AST parsing logic to find `setupValidation`.
+- [ ] Implement the function body replacement logic.
+- [ ] Implement the function appending logic for when `setupValidation` is not found.
+- [ ] Update standard code generation to include an `init()` function that calls `setupValidation()`.
+- [ ] Create the `examples/codegen-onefile` directory and initial `main.go` and `main_test.go` files.
+- [ ] Add unit tests for the injection logic.
+- [ ] Add integration tests using the `examples/codegen-onefile` example.
+- [ ] Update `README.md` and any other relevant documentation to reflect the new feature.
