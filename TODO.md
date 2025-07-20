@@ -179,6 +179,5 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Improve the capabilities of the `validate` tag parser.
 
-- [ ] Add support for `min=<value>` and `max=<value>` shorthands for numeric types.
-- [ ] Add support for `len=<value>`, `min=<value>`, `max=<value>` for string and slice types.
-- [ ] Improve `required` shorthand to be applicable to `string` types (as an alias for `nonzero`).
+- [ ] Add support for `min=<value>` and `max=<value>` shorthands for numeric types (e.g., `validate:"min=18"`).
+- [ ] Add support for `len=<value>`, `min=<value>`, `max=<value>` for string and slice types (e.g., `validate:"min=2,max=20"` for a string).
