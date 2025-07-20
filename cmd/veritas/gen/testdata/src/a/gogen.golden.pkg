@@ -1,0 +1,29 @@
+package myvalidation
+
+import (
+	veritas "github.com/podhmo/veritas"
+	a "testpkg/a"
+)
+
+func init() {
+	veritas.Register("testpkg/a.User", veritas.ValidationRuleSet{
+		TypeRules: []string{
+			`self.Email != ""`,
+		},
+		FieldRules: map[string][]string{
+			"Email": {
+				`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`,
+			},
+			"Name": {
+				`self != ""`,
+			},
+		},
+	})
+}
+
+// GetKnownTypes returns a list of all types that have validation rules.
+func GetKnownTypes() []any {
+	return []any{
+		a.User{},
+	}
+}

@@ -17,7 +17,8 @@ import (
 const doc = "gogen is a tool to generate validation code from Go source code."
 
 var (
-	flagOutput string
+	flagOutput  string
+	flagPackage string
 )
 
 var Generator = &codegen.Generator{
@@ -28,6 +29,7 @@ var Generator = &codegen.Generator{
 
 func init() {
 	Generator.Flags.StringVar(&flagOutput, "o", "", "output file name")
+	Generator.Flags.StringVar(&flagPackage, "pkg", "validation", "package name")
 }
 
 func run(pass *codegen.Pass) error {
@@ -88,8 +90,7 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	}
 
 	// 2. Print package and imports
-	// TODO: make package name configurable
-	fmt.Fprintf(&buf, "package validation\n\n")
+	fmt.Fprintf(&buf, "package %s\n\n", flagPackage)
 	fmt.Fprintf(&buf, "import (\n")
 	// Sort imports for deterministic output
 	importAliases := make([]string, 0, len(imports))
