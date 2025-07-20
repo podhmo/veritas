@@ -120,49 +120,46 @@ For more dynamic environments, you can load validation rules from a JSON file.
 
 2.  **Load the rules and use the validator:**
 
-    In your application, use `veritas.NewValidatorFromJSONFile()` to create a validator from your JSON file. You'll also need to provide a `TypeAdapter` to convert your Go types into a map that the validator can understand.
+    In your application, use `veritas.NewValidatorFromJSONFile()` to create a validator from your JSON file. You'll also need to tell the validator about your types using the `veritas.WithTypes()` option. This allows Veritas to understand your native Go structs without needing a manual conversion adapter.
 
     ```go
     // file: main.go
     package main
 
     import (
-	"context"
-	"encoding/json"
-	"errors"
-	"log/slog"
-	"net/http"
-	"os"
+        "context"
+        "log"
 
-	"github.com/podhmo/veritas"
+        "github.com/podhmo/veritas"
     )
 
     type User struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+        Name  string `json:"name"`
+        Email string `json:"email"`
     }
 
     func main() {
-        // setup validator
-        v, err := veritas.NewValidatorFromJSONFile("./rules.json", veritas.WithTypeAdapters(
-            map[string]veritas.TypeAdapter{
-                "main.User": func(ob any) (map[string]any, error) {
-                    v, ok := ob.(User)
-                    if !ok {
-                        return nil, errors.New("unexpected type")
-                    }
-                    return map[string]any{
-                        "Name":  v.Name,
-                        "Email": v.Email,
-                    }, nil
-                },
-            },
-        ))
+        // Setup validator
+        v, err := veritas.NewValidatorFromJSONFile(
+            "./rules.json",
+            veritas.WithTypes(User{}), // Pass struct instances to the validator
+        )
         if err != nil {
             log.Fatalf("Failed to create validator: %v", err)
         }
 
-        // ... (rest of the http server example)
+        // Create a user object to validate
+        user := User{
+            Name:  "Test User",
+            Email: "test@example.com",
+        }
+
+        // Validate the object
+        if err := v.Validate(context.Background(), user); err != nil {
+            log.Printf("Validation failed: %v", err)
+        } else {
+            log.Println("Validation successful!")
+        }
     }
     ```
 

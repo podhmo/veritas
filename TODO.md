@@ -183,9 +183,9 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 -   [ ] **8.6: Deprecate and Remove `TypeAdapter` (Postponed)**
     -   **Note**: The full removal of the `TypeAdapter` is postponed due to complexities with `cel-go`'s native type support for generics and nil pointers. The `TypeAdapter` will remain as a fallback mechanism. The `WithTypes` option is now the recommended path for simple, non-generic structs. A more detailed plan for full removal is needed. See `docs/remove-adapter-plan.md` for a summary of the challenges.
 
--   [ ] **8.7: Update Documentation**
-    -   [ ] Update `README.md`, `docs/knowledge.md` and other relevant documents to reflect the new, simpler API.
-    -   [ ] Remove all mentions of the `TypeAdapter` pattern where `WithTypes` is the preferred alternative.
+-   [x] **8.7: Update Documentation**
+    -   [x] Update `README.md` and `docs/knowledge.md` to reflect the new, simpler API.
+    -   [x] Emphasized `WithTypes` as the recommended approach, and clarified that `TypeAdapter` is a legacy pattern retained for complex cases and backward compatibility.
 
 -   [ ] **8.8: Fully Support Native Generics and Pointers (New Task)**
     -   [ ] Investigate and implement robust support for generic types within the `WithTypes` validation path.
