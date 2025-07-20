@@ -1,17 +1,17 @@
 # CLI Reference
 
-The `veritas` project provides two command-line tools: `veritas-gen` for code generation and `veritas-lint` for linting.
+The `veritas` command-line tool has two main functions: generating validation code and linting your validation rules. The behavior is controlled by the `-lint` flag.
 
-## Code Generation (`veritas-gen`)
+## Code Generation (Default)
 
-This is the recommended way to use Veritas. The `veritas-gen` tool scans your Go source files for struct annotations and generates Go code containing your validation rules.
+By default, the `veritas` tool scans your Go source files for struct annotations and generates Go code containing your validation rules.
 
 ### Usage
 
 The generator is typically run via `go generate`.
 
 ```go
-//go:generate go run github.com/podhmo/veritas/cmd/veritas-gen [flags]
+//go:generate go run github.com/podhmo/veritas/cmd/veritas [flags]
 ```
 
 ### Flags
@@ -25,7 +25,7 @@ The generator is typically run via `go generate`.
 // file: models/user.go
 package models
 
-//go:generate go run github.com/podhmo/veritas/cmd/veritas-gen -o veritas_gen.go
+//go:generate go run github.com/podhmo/veritas/cmd/veritas -o veritas_gen.go
 
 type User struct {
     // ...
@@ -34,14 +34,14 @@ type User struct {
 
 Running `go generate ./...` in your project will execute this command, creating `veritas_gen.go` in the `models` package.
 
-## Linting (`veritas-lint`)
+## Linting (`-lint` flag)
 
-The linter statically checks your validation rules for common errors. Since code generation with `veritas-gen` is the primary workflow, many errors are caught at compile time. However, the linter is still useful for validating raw CEL expressions.
+When the `-lint` flag is provided, the tool switches to linting mode. It statically checks your validation rules for common errors.
 
 ### Usage
 
 ```bash
-go run github.com/podhmo/veritas/cmd/veritas-lint [packages]
+go run github.com/podhmo/veritas/cmd/veritas -lint [packages]
 ```
 
 The linter recursively finds and analyzes Go files in the specified packages. If no packages are provided, it defaults to the current directory (`.`).
@@ -58,5 +58,5 @@ The linter performs the following checks:
 To run the linter on your entire project:
 
 ```bash
-go run github.com/podhmo/veritas/cmd/veritas-lint ./...
+go run github.com/podhmo/veritas/cmd/veritas -lint ./...
 ```

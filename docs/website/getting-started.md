@@ -10,7 +10,7 @@ The recommended approach is to use Go code generation for a type-safe, high-perf
     // file: models/user.go
     package models
 
-    //go:generate go run github.com/podhmo/veritas/cmd/veritas-gen -o veritas_gen.go
+    //go:generate go run github.com/podhmo/veritas/cmd/veritas -o veritas_gen.go
 
     // @cel: self.Password == self.PasswordConfirm
     type User struct {
