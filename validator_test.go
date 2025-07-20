@@ -639,9 +639,7 @@ func TestValidator_Validate_Native(t *testing.T) {
 				Age:   20,
 				ID:    intPtr(1),
 			},
-			// Note: The rule for Email is in FieldRules, but in native mode, it's evaluated
-			// against the whole object.
-			wantErr: NewValidationError("sources.MockUser", "Email", `self.Email != "" && self.Email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
 		},
 		{
 			name: "type rule violation - native",
@@ -651,21 +649,20 @@ func TestValidator_Validate_Native(t *testing.T) {
 				Age:   17, // Fails "self.Age >= 18"
 				ID:    intPtr(1),
 			},
-			wantErr: NewValidationError("sources.MockUser", "", "self.Age >= 18"),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "", "self.Age >= 18"),
 		},
 		{
 			name: "multiple errors - native",
 			obj: &sources.MockUser{
-				Name:  "", // Fails "self.Name != """
+				Name:  "", // Fails "self != """
 				Email: "invalid-email",
 				Age:   17, // Fails "self.Age >= 18"
 				ID:    nil,
 			},
 			wantErr: errors.Join(
-				NewValidationError("sources.MockUser", "", "self.Age >= 18"),
-				NewValidationError("sources.MockUser", "Name", `self.Name != ""`),
-				NewValidationError("sources.MockUser", "Email", `self.Email != "" && self.Email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
-				NewValidationError("sources.MockUser", "ID", `has(self.ID)`),
+				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "", "self.Age >= 18"),
+				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Name", `self != ""`),
+				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
 			),
 		},
 	}

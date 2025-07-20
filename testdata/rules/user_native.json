@@ -5,13 +5,13 @@
     ],
     "fieldRules": {
       "Email": [
-        "self.Email != \"\" && self.Email.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
+          "self != \"\" && self.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
       ],
       "ID": [
-        "has(self.ID)"
+          "self != null"
       ],
       "Name": [
-        "self.Name != \"\""
+          "self != \"\""
       ]
     }
   }
