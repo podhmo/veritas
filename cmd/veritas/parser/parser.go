@@ -22,6 +22,12 @@ type PackageInfo struct {
 	Types     *types.Package
 }
 
+// TypeInfo represents a parsed type that has validation rules.
+type TypeInfo struct {
+	PkgPath string
+	Name    string
+}
+
 var shorthandCELMap = map[string]any{
 	"required": map[string]string{
 		"ptr": "self != null",
@@ -47,19 +53,20 @@ func NewParser(logger *slog.Logger) *Parser {
 	return &Parser{logger: logger}
 }
 
-func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error) {
+func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, []TypeInfo, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
 	}
 	pkgs, err := packages.Load(cfg, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load packages: %w", err)
+		return nil, nil, fmt.Errorf("failed to load packages: %w", err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("errors occurred while loading packages")
+		return nil, nil, fmt.Errorf("errors occurred while loading packages")
 	}
 
 	ruleSets := make(map[string]veritas.ValidationRuleSet)
+	var allTypeInfos []TypeInfo
 
 	for _, pkg := range pkgs {
 		info := PackageInfo{
@@ -68,22 +75,24 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 			TypesInfo: pkg.TypesInfo,
 			Types:     pkg.Types,
 		}
-		rules, err := p.ParseDirectly(info)
+		rules, typeInfos, err := p.ParseDirectly(info)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse directly for package %s: %w", pkg.PkgPath, err)
+			return nil, nil, fmt.Errorf("failed to parse directly for package %s: %w", pkg.PkgPath, err)
 		}
 		for k, v := range rules {
 			ruleSets[k] = v
 		}
+		allTypeInfos = append(allTypeInfos, typeInfos...)
 	}
 
-	return ruleSets, nil
+	return ruleSets, allTypeInfos, nil
 }
 
 // ParseDirectly parses validation rules from the given package information
 // without loading packages itself.
-func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationRuleSet, error) {
+func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationRuleSet, []TypeInfo, error) {
 	ruleSets := make(map[string]veritas.ValidationRuleSet)
+	var typeInfos []TypeInfo
 
 	for _, f := range info.Syntax {
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -105,13 +114,13 @@ func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationR
 				var structNameBuilder strings.Builder
 				structNameBuilder.WriteString(typeSpec.Name.Name)
 
-				if typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0 {
+				isGeneric := typeSpec.TypeParams != nil && len(typeSpec.TypeParams.List) > 0
+				if isGeneric {
 					structNameBuilder.WriteString("[")
 					for i, p := range typeSpec.TypeParams.List {
 						if i > 0 {
 							structNameBuilder.WriteString(", ")
 						}
-						// p.Names is a list of identifiers, e.g., "T" in T any
 						for j, name := range p.Names {
 							if j > 0 {
 								structNameBuilder.WriteString(", ")
@@ -140,13 +149,17 @@ func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationR
 				if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
 					fullTypeName := fmt.Sprintf("%s.%s", info.PkgPath, structName)
 					ruleSets[fullTypeName] = ruleSet
+					// Only add non-generic types to the list for instantiation.
+					if !isGeneric {
+						typeInfos = append(typeInfos, TypeInfo{PkgPath: info.PkgPath, Name: typeSpec.Name.Name})
+					}
 				}
 			}
 			return true
 		})
 	}
 
-	return ruleSets, nil
+	return ruleSets, typeInfos, nil
 }
 
 func (p *Parser) extractRulesForStruct(info PackageInfo, structType *ast.StructType, ruleSet *veritas.ValidationRuleSet) {
@@ -200,12 +213,9 @@ func (p *Parser) getEmbeddedStruct(info PackageInfo, expr ast.Expr) (*ast.Struct
 
 	obj := named.Obj()
 	if obj == nil || obj.Pkg() != info.Types {
-		// Not defined in the same package, handling this would require finding the package and file.
-		// For now, we only support embedded structs from the same package.
 		return nil, false
 	}
 
-	// Find the AST node for the type definition
 	for _, f := range info.Syntax {
 		for _, decl := range f.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
@@ -247,12 +257,10 @@ func (p *Parser) processRules(rawRules []string, tv types.Type) ([]string, error
 		remaining = nextRemaining
 	}
 
-	// Post-process to join non-directive rules
 	var finalRules []string
 	var simpleConditions []string
 
 	for _, cel := range celRules {
-		// This is a heuristic: directives like `all()` are assumed to be standalone.
 		if strings.Contains(cel, ".all(") {
 			if len(simpleConditions) > 0 {
 				finalRules = append(finalRules, strings.Join(simpleConditions, " && "))
@@ -371,13 +379,7 @@ func (p *Parser) parseRule(rawRules []string, tv types.Type) (*Rule, []string, e
 		rule.Nested = []*Rule{nested}
 		return rule, remaining, nil
 	default:
-		// Check if the first token starts a CEL expression.
 		if strings.HasPrefix(token, "cel:") {
-			// Find where the CEL expression ends. It might span multiple "tokens"
-			// if there are commas within the CEL expression itself.
-			// This is a simplification; a truly robust solution would need a more
-			// sophisticated parser. For now, we assume CEL expressions don't contain
-			// the 'dive', 'keys', or 'values' keywords and that they are the last rule.
 			var celExprBuilder strings.Builder
 			celExprBuilder.WriteString(strings.TrimPrefix(token, "cel:"))
 
@@ -396,7 +398,6 @@ func (p *Parser) parseRule(rawRules []string, tv types.Type) (*Rule, []string, e
 			return rule, remaining[end:], nil
 		}
 
-		// Find end of shorthands if not a CEL expression
 		end := 0
 		for i, t := range rawRules {
 			trimmed := strings.TrimSpace(t)
@@ -438,7 +439,6 @@ func (p *Parser) shorthandToCEL(shorthand string, tv types.Type, varName string)
 }
 
 func (p *Parser) categorizeType(tv types.Type) string {
-	// Keep resolving named types until we get to the underlying type.
 	for {
 		named, ok := tv.(*types.Named)
 		if !ok {
@@ -449,9 +449,6 @@ func (p *Parser) categorizeType(tv types.Type) string {
 
 	switch t := tv.(type) {
 	case *types.TypeParam:
-		// For a generic type parameter `T`, we can't know the concrete type at parse time.
-		// We'll treat it like a pointer for shorthands like `required` -> `!= null`.
-		// This is a reasonable default for `any` constraints.
 		return "ptr"
 	case *types.Basic:
 		switch {

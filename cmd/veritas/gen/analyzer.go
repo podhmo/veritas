@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/gostaticanalysis/codegen"
 	"github.com/podhmo/veritas"
@@ -31,10 +32,9 @@ func init() {
 }
 
 func run(pass *codegen.Pass) error {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil)) // Create a logger
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	p := parser.NewParser(logger)
 
-	// Create the PackageInfo struct from the pass
 	info := parser.PackageInfo{
 		PkgPath:   pass.Pkg.Path(),
 		Syntax:    pass.Files,
@@ -42,8 +42,7 @@ func run(pass *codegen.Pass) error {
 		Types:     pass.Pkg,
 	}
 
-	// Call the new direct parsing function
-	ruleSets, err := p.ParseDirectly(info)
+	ruleSets, typeInfos, err := p.ParseDirectly(info)
 	if err != nil {
 		return fmt.Errorf("failed to parse directly: %w", err)
 	}
@@ -56,7 +55,7 @@ func run(pass *codegen.Pass) error {
 	}
 
 	if flagOutput == "" {
-		return gen.Generate(pass.Pkg.Name(), ruleSets, pass.Output)
+		return gen.Generate(pass.Pkg.Name(), ruleSets, typeInfos, pass.Output)
 	}
 
 	f, err := os.Create(flagOutput)
@@ -64,27 +63,39 @@ func run(pass *codegen.Pass) error {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer f.Close()
-	return gen.Generate(pass.Pkg.Name(), ruleSets, f)
+	return gen.Generate(pass.Pkg.Name(), ruleSets, typeInfos, f)
 }
 
-// GoCodeGenerator generates Go code for validation rule sets.
 type GoCodeGenerator struct {
 	logger *slog.Logger
 }
 
-// Generate writes the Go code for the given rule sets to the writer.
-func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.ValidationRuleSet, w io.Writer) error {
+func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.ValidationRuleSet, typeInfos []parser.TypeInfo, w io.Writer) error {
 	var buf bytes.Buffer
+
+	// Group types by package path to generate imports
+	imports := make(map[string]string)
+	for _, ti := range typeInfos {
+		if _, exists := imports[ti.PkgPath]; !exists {
+			// Generate a safe alias for the package
+			alias := strings.ReplaceAll(ti.PkgPath, "/", "_")
+			alias = strings.ReplaceAll(alias, "-", "_")
+			alias = strings.ReplaceAll(alias, ".", "_")
+			imports[ti.PkgPath] = alias
+		}
+	}
 
 	// 1. Print package and imports
 	fmt.Fprintf(&buf, "package %s\n\n", pkgName)
 	fmt.Fprintf(&buf, "import (\n")
 	fmt.Fprintf(&buf, "\t\"github.com/podhmo/veritas\"\n")
+	for path, alias := range imports {
+		fmt.Fprintf(&buf, "\t%s \"%s\"\n", alias, path)
+	}
 	fmt.Fprintf(&buf, ")\n\n")
 
-	// 2. Print init function
+	// 2. Print init function for registering rules
 	fmt.Fprintf(&buf, "func init() {\n")
-	// Sort keys for deterministic output
 	keys := make([]string, 0, len(ruleSets))
 	for k := range ruleSets {
 		keys = append(keys, k)
@@ -119,9 +130,20 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 		}
 		fmt.Fprintf(&buf, "\t})\n")
 	}
+	fmt.Fprintf(&buf, "}\n\n")
+
+	// 3. Print GetRegisteredTypes function
+	fmt.Fprintf(&buf, "// GetRegisteredTypes returns a list of all types that have validation rules.\n")
+	fmt.Fprintf(&buf, "func GetRegisteredTypes() []any {\n")
+	fmt.Fprintf(&buf, "\treturn []any{\n")
+	for _, ti := range typeInfos {
+		alias := imports[ti.PkgPath]
+		fmt.Fprintf(&buf, "\t\t%s.%s{},\n", alias, ti.Name)
+	}
+	fmt.Fprintf(&buf, "\t}\n")
 	fmt.Fprintf(&buf, "}\n")
 
-	// 3. Format and write the output
+	// 4. Format and write the output
 	source := buf.Bytes()
 	formatted, err := format.Source(source)
 	if err != nil {
