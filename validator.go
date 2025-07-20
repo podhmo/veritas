@@ -278,6 +278,20 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 	return elemInterface
 }
 
+// isNativeType checks if a given reflect.Type is configured for native validation.
+func (v *Validator) isNativeType(typ reflect.Type) bool {
+	if v.nativeEnv == nil {
+		return false
+	}
+	// This is a simplification. A more robust way would be to store the
+	// registered native types in a map[reflect.Type]struct{} for quick lookups.
+	// For now, we check if the type has rules and no adapter, which implies native.
+	typeName := v.getTypeName(typ)
+	_, hasRules := v.rules[typeName]
+	_, hasAdapter := v.adapters[typ]
+	return hasRules && !hasAdapter
+}
+
 // validateRecursive is the internal helper that performs the actual validation.
 func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[]error) {
 	// Check for context cancellation before proceeding.
@@ -303,11 +317,12 @@ func (v *Validator) validateRecursive(ctx context.Context, obj any, allErrors *[
 	}
 	typ := val.Type()
 
-	// If nativeEnv is configured, use the native validation path.
-	if v.nativeEnv != nil {
+	// Determine which validation path to take for the current object.
+	if v.isNativeType(typ) {
 		v.validateNative(ctx, val.Interface(), typ, allErrors)
 	} else {
-		// Otherwise, use the adapter-based validation path.
+		// Default to adapter-based path if not explicitly native.
+		// This handles types with adapters and types with no rules.
 		v.validateWithAdapter(ctx, val.Interface(), typ, allErrors)
 	}
 

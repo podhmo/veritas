@@ -161,9 +161,9 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] Inside `NewValidator`, if this option is present, use the types to create a `cel.Env` with `ext.NativeTypes()`.
     -   [x] The validation logic will be updated to use the native path if the new env is available, otherwise it will fall back to the existing adapter path.
 
--   [ ] **8.2: Update `NewValidatorFromJSONFile`**
-    -   [ ] Modify `NewValidatorFromJSONFile` to accept the new `WithTypes` option.
-    -   [ ] Update its internal logic to pass the types to `NewValidator`.
+-   [x] **8.2: Update `NewValidatorFromJSONFile`**
+    -   [x] Modify `NewValidatorFromJSONFile` to accept the new `WithTypes` option.
+    -   [x] Update its internal logic to pass the types to `NewValidator`.
 
 -   [ ] **8.3: Update `http-server` Example**
     -   [ ] Refactor `examples/http-server/main.go` to use the new `WithTypes` option.
