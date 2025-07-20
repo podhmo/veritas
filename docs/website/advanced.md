@@ -56,19 +56,31 @@ You can extend Veritas with your own custom functions by creating a `cel.EnvOpti
 2.  **Create your validator with the custom function:**
 
     ```go
-    import "github.com/podhmo/veritas"
+    import (
+        "github.com/podhmo/veritas"
+        "your-project/models" // Assuming your types are in this package
+    )
 
-    // Create a new engine with your function
-    engine, err := veritas.NewEngine(isAwesome())
-    if err != nil {
-        // handle error
-    }
 
-    // Create a validator using the custom engine
-    validator, err := veritas.NewValidatorWithEngine(engine)
+    // Create a validator, passing the custom function
+    // and registering your application's types.
+    validator, err := veritas.NewValidator(
+        veritas.WithCELHelpers(isAwesome()),
+        veritas.WithTypes(models.GetKnownTypes()...),
+    )
     if err != nil {
         // handle error
     }
 
     // Now you can use the isAwesome function in your rules
     ```
+
+## Legacy Patterns: The `TypeAdapter`
+
+Previous versions of Veritas used a `TypeAdapter` pattern to convert Go structs into a `map[string]any` before validation. This was necessary to work around limitations in `cel-go`'s native type support.
+
+**This pattern is now considered legacy.**
+
+The recommended approach is to use `veritas.WithTypes(...)` to register your Go structs directly with the validation engine. This provides better performance and a simpler API.
+
+The `TypeAdapter` is preserved for backward compatibility and for complex scenarios involving generic types where the native `cel-go` support may still have limitations. For most use cases, you should prefer `WithTypes`.
