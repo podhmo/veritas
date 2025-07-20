@@ -34,6 +34,18 @@ The legacy `TypeAdapter` pattern has not been fully removed. It is retained as a
 
 The complete removal of the `TypeAdapter` is postponed until the native validation path achieves feature parity, particularly with robust support for generics.
 
+### Challenge: Native Validation of Generic Types
+
+-   **Problem**: Supporting generic types like `Box[T]` in the native validation path presents a significant challenge. A single generic rule definition (e.g., for `Box[T]`) needs to apply to multiple concrete instantiations (e.g., `Box[string]`, `Box[*Item]`). This creates two main problems:
+    1.  **Environment Setup**: `cel-go` needs a `cel.Env` configured for each *concrete* type (`Box[string]`, `Box[*Item]`, etc.) to understand its fields.
+    2.  **Rule Compatibility**: A rule that is valid for one type instantiation may be invalid for another. For example, the rule `self.Value != null` is valid for `Box[*Item]` (where `Value` is a pointer) but causes a `no matching overload` compilation error for `Box[string]` (as `string` is not nullable).
+
+-   **Current Solution & Workaround**:
+    -   **Type-Specific Environments**: The `Validator` now caches a separate `cel.Env` for each concrete type encountered during validation. The `getNativeEnv` method creates these environments on-the-fly, ensuring that `self` is always correctly typed.
+    -   **Ignoring Compilation Errors (Workaround)**: To handle the rule compatibility issue, a workaround has been implemented. When compiling a type-level rule for a native type, if `cel-go` returns a `no matching overload` error, the library currently *ignores* it and skips the rule.
+        -   **Rationale**: This is a pragmatic compromise. It prevents the validation from failing on non-nullable types while still allowing the rule to be applied to nullable (pointer) types. It assumes that the non-nullable aspect (e.g., for a string) will be enforced by other means, such as a field-level rule like `self != ""`.
+        -   **Limitation**: This is not a perfect solution. It masks a potential mismatch between the rule and the type it's applied to. A more robust solution would require more sophisticated type analysis or more expressive rule definitions, which adds significant complexity.
+
 ## 2. Development Workflow Principles
 
 ### Documentation-First Approach for Complex Tasks

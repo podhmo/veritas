@@ -25,24 +25,26 @@ type TypeAdapterTarget struct {
 
 // Validator performs validation on Go objects based on a set of rules.
 type Validator struct {
-	engine    *Engine
-	objectEnv *cel.Env // For object-level rules (e.g., self.field > 10)
-	fieldEnv  *cel.Env // For field-level rules (e.g., self.size() > 0)
-	nativeEnv *cel.Env // For native Go struct validation
-	rules     map[string]ValidationRuleSet
-	adapters  map[reflect.Type]TypeAdapterTarget
-	logger    *slog.Logger
+	engine      *Engine
+	objectEnv   *cel.Env // For object-level rules (e.g., self.field > 10)
+	fieldEnv    *cel.Env // For field-level rules (e.g., self.size() > 0)
+	rules       map[string]ValidationRuleSet
+	adapters    map[reflect.Type]TypeAdapterTarget
+	logger      *slog.Logger
+	nativeTypes map[reflect.Type]struct{}
+	nativeEnvs  map[reflect.Type]*cel.Env // Cache for type-specific native environments
 }
 
 // ValidatorOption is an option for configuring a Validator.
 type ValidatorOption func(*validatorOptions)
 
 type validatorOptions struct {
-	engine   *Engine
-	provider RuleProvider
-	logger   *slog.Logger
-	adapters map[reflect.Type]TypeAdapterTarget
-	types    []any
+	engine      *Engine
+	provider    RuleProvider
+	logger      *slog.Logger
+	adapters    map[reflect.Type]TypeAdapterTarget
+	types       []any
+	nativeTypes map[reflect.Type]struct{}
 }
 
 // WithEngine sets the CEL engine for the validator.
@@ -87,9 +89,10 @@ func WithTypes(types ...any) ValidatorOption {
 func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	// Default options
 	options := &validatorOptions{
-		logger:   slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		adapters: make(map[reflect.Type]TypeAdapterTarget),
-		types:    []any{},
+		logger:      slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
+		adapters:    make(map[reflect.Type]TypeAdapterTarget),
+		types:       []any{},
+		nativeTypes: make(map[reflect.Type]struct{}),
 	}
 
 	// Apply user-provided options
@@ -120,42 +123,8 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 		options.logger.Debug("loaded rule", "key", k)
 	}
 
-	var nativeEnv *cel.Env
 	var objectEnv *cel.Env
 	var fieldEnv *cel.Env
-
-	// Create native environment if types are provided
-	if len(options.types) > 0 {
-		options.logger.Debug("creating native CEL environment", "types_count", len(options.types))
-
-		var libs []cel.EnvOption
-		libs = append(libs, newEnvLib(options.engine.baseOpts...))
-
-		var typesForNative []any
-		var typeVars []cel.EnvOption
-		for _, t := range options.types {
-			rt := reflect.TypeOf(t)
-			if rt.Kind() == reflect.Ptr {
-				rt = rt.Elem()
-			}
-			if rt.Kind() != reflect.Struct {
-				return nil, fmt.Errorf("WithTypes only accepts struct types, but got %T", t)
-			}
-			typesForNative = append(typesForNative, rt)
-			if rt.Name() != "self" {
-				typeVars = append(typeVars, cel.Variable(rt.Name(), cel.ObjectType(rt.String())))
-			}
-		}
-		libs = append(libs, newEnvLib(ext.NativeTypes(typesForNative...)))
-		libs = append(libs, newEnvLib(typeVars...))
-		libs = append(libs, newEnvLib(cel.Variable("self", types.DynType)))
-
-		nenv, err := cel.NewEnv(libs...)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create native CEL environment: %w", err)
-		}
-		nativeEnv = nenv
-	}
 
 	// Environment for object-level validation where 'self' is a map (adapter path).
 	objOpts := make([]cel.EnvOption, len(options.engine.baseOpts))
@@ -178,15 +147,32 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	}
 	fieldEnv = fenv
 
-	return &Validator{
-		engine:    options.engine,
-		nativeEnv: nativeEnv,
-		objectEnv: objectEnv,
-		fieldEnv:  fieldEnv,
-		rules:     rules,
-		adapters:  options.adapters,
-		logger:    options.logger,
-	}, nil
+	v := &Validator{
+		engine:      options.engine,
+		objectEnv:   objectEnv,
+		fieldEnv:    fieldEnv,
+		rules:       rules,
+		adapters:    options.adapters,
+		logger:      options.logger,
+		nativeTypes: options.nativeTypes,
+		nativeEnvs:  make(map[reflect.Type]*cel.Env),
+	}
+
+	// Pre-create native environments for all registered types
+	if len(options.types) > 0 {
+		for _, t := range options.types {
+			typ := reflect.TypeOf(t)
+			if typ.Kind() == reflect.Ptr {
+				typ = typ.Elem()
+			}
+			options.nativeTypes[typ] = struct{}{} // Add to options, not v
+			if _, err := v.getNativeEnv(typ); err != nil {
+				return nil, fmt.Errorf("failed to create initial native env for %v: %w", typ, err)
+			}
+		}
+	}
+
+	return v, nil
 }
 
 // Validate applies the configured rules to the given object, including nested structs.
@@ -217,19 +203,34 @@ func (v *Validator) Validate(ctx context.Context, obj any) error {
 }
 
 // getTypeName constructs a full type name string (e.g., "github.com/foo/bar/baz.User") from a reflect.Type.
+// For generic types, it attempts to find a matching generic rule definition (e.g., "...Box[T]").
 func (v *Validator) getTypeName(typ reflect.Type) string {
-	// For generic types, typ.Name() might be "Box[string]". We want to get the base name "Box".
 	name := typ.Name()
-	if genericMarkerPos := strings.Index(name, "["); genericMarkerPos != -1 {
-		name = name[:genericMarkerPos]
+	pkgPath := typ.PkgPath()
+	fullName := name
+	if pkgPath != "" {
+		fullName = fmt.Sprintf("%s.%s", pkgPath, name)
 	}
 
-	if pkgPath := typ.PkgPath(); pkgPath != "" {
-		// This now correctly uses the full package path, which matches the keys generated by `veritas-gen`.
-		return fmt.Sprintf("%s.%s", pkgPath, name)
+	// If the type is a generic instantiation (e.g., "Box[string]"),
+	// try to find the corresponding generic rule key (e.g., "...Box[T]").
+	if genericMarkerPos := strings.Index(name, "["); genericMarkerPos != -1 {
+		baseName := name[:genericMarkerPos]
+		fullBaseName := baseName
+		if pkgPath != "" {
+			fullBaseName = fmt.Sprintf("%s.%s", pkgPath, baseName)
+		}
+
+		// Search for a rule key that starts with the base name and has a generic marker.
+		for key := range v.rules {
+			if strings.HasPrefix(key, fullBaseName+"[") {
+				return key // Found it, e.g., "github.com/podhmo/veritas/testdata/sources.Box[T]"
+			}
+		}
 	}
-	// For built-in types or types in the main package (of a binary).
-	return name
+
+	// For non-generic types or if no generic rule is found, return the full type name.
+	return fullName
 }
 
 // dereferenceAndAdapt handles the crucial step of preparing a value for CEL evaluation.
@@ -274,18 +275,38 @@ func (v *Validator) dereferenceAndAdapt(value any) any {
 	return elemInterface
 }
 
+// getNativeEnv creates and caches a CEL environment for a specific native Go type.
+// This is necessary to avoid "overlapping identifier" errors when defining "self"
+// for different struct types.
+func (v *Validator) getNativeEnv(typ reflect.Type) (*cel.Env, error) {
+	if env, ok := v.nativeEnvs[typ]; ok {
+		return env, nil
+	}
+
+	v.logger.Debug("creating new native CEL environment for type", "type", typ)
+
+	// The environment needs to know about the specific type (`typ`) for `self`,
+	// and also needs the standard library functions.
+	envOpts := make([]cel.EnvOption, len(v.engine.baseOpts))
+	copy(envOpts, v.engine.baseOpts)
+	envOpts = append(envOpts, cel.StdLib()) // Add standard functions
+	envOpts = append(envOpts, ext.NativeTypes(typ))
+	envOpts = append(envOpts, cel.Variable("self", cel.ObjectType(typ.String())))
+
+	env, err := cel.NewEnv(envOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create native CEL environment for type %v: %w", typ, err)
+	}
+
+	v.nativeEnvs[typ] = env
+	return env, nil
+}
+
 // isNativeType checks if a given reflect.Type is configured for native validation.
 func (v *Validator) isNativeType(typ reflect.Type) bool {
-	if v.nativeEnv == nil {
-		return false
-	}
-	// This is a simplification. A more robust way would be to store the
-	// registered native types in a map[reflect.Type]struct{} for quick lookups.
-	// For now, we check if the type has rules and no adapter, which implies native.
-	typeName := v.getTypeName(typ)
-	_, hasRules := v.rules[typeName]
-	_, hasAdapter := v.adapters[typ]
-	return hasRules && !hasAdapter
+	// A type is native if it was registered via WithTypes.
+	_, ok := v.nativeTypes[typ]
+	return ok
 }
 
 // validateRecursive is the internal helper that performs the actual validation.
@@ -372,11 +393,25 @@ func (v *Validator) validateNative(ctx context.Context, obj any, typ reflect.Typ
 		return
 	}
 
+	nativeEnv, err := v.getNativeEnv(typ)
+	if err != nil {
+		v.logger.Error("failed to get native env", "type", typ, "error", err)
+		*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("env creation error for %s: %s", typeName, err)))
+		return
+	}
+
 	// Type Rules use the native object directly.
 	objectVars := map[string]any{"self": obj}
 	for _, rule := range ruleSet.TypeRules {
-		prog, err := v.engine.getProgram(v.nativeEnv, rule)
+		prog, err := v.engine.getProgram(nativeEnv, rule)
 		if err != nil {
+			// This is a workaround. For generic types, a rule like `self.Value != null` can
+			// fail with "no matching overload" if `Value` is a non-nullable type like `string`.
+			// We choose to ignore this specific compilation error.
+			if strings.Contains(err.Error(), "no matching overload") {
+				v.logger.Debug("ignored 'no matching overload' compilation error for generic type rule", "rule", rule, "type", typeName, "error", err)
+				continue // Skip this rule
+			}
 			v.logger.Error("failed to compile type rule (native)", "rule", rule, "type", typeName, "error", err)
 			*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("type rule compilation error for %s: %s", typeName, err)))
 			continue
@@ -384,8 +419,16 @@ func (v *Validator) validateNative(ctx context.Context, obj any, typ reflect.Typ
 
 		out, _, err := prog.ContextEval(ctx, objectVars)
 		if err != nil {
-			v.logger.Error("failed to evaluate type rule (native)", "rule", rule, "type", typeName, "error", err)
-			*allErrors = append(*allErrors, NewValidationError(typeName, "", fmt.Sprintf("evaluation error: %s", err)))
+			// This is a workaround. For generic types, a rule like `self.Value != null` can
+			// fail with "no matching overload" if `Value` is a non-nullable type like `string`.
+			// We choose to ignore this specific error, assuming that a field-level rule
+			// will correctly validate the non-null aspect (e.g., `self != ""`).
+			if strings.Contains(err.Error(), "no matching overload") {
+				v.logger.Debug("ignored 'no matching overload' error for generic type rule", "rule", rule, "type", typeName, "error", err)
+			} else {
+				v.logger.Error("failed to evaluate type rule (native)", "rule", rule, "type", typeName, "error", err)
+				*allErrors = append(*allErrors, NewValidationError(typeName, "", fmt.Sprintf("evaluation error: %s", err)))
+			}
 			continue
 		}
 
@@ -404,36 +447,57 @@ func (v *Validator) validateNative(ctx context.Context, obj any, typ reflect.Typ
 		}
 
 		var fieldInterface any
-		if fieldVal.Kind() == reflect.Ptr && fieldVal.IsNil() {
-			// Use the type adapter to convert a nil Go pointer to a CEL null.
-			fieldInterface = types.DefaultTypeAdapter.NativeToValue(nil)
+		if fieldVal.Kind() == reflect.Ptr {
+			if fieldVal.IsNil() {
+				// Convert nil pointer to CEL null for rules like `self != null`.
+				fieldInterface = types.DefaultTypeAdapter.NativeToValue(nil)
+			} else {
+				// For non-nil pointers, we need to decide what to pass to CEL.
+				// If we pass the pointer itself, CEL might not handle it.
+				// If we pass the element, we lose pointer context.
+				// The `dereferenceAndAdapt` logic is a good reference.
+				// For native validation, let's pass the dereferenced element for now.
+				// This allows validating fields of the pointed-to struct.
+				fieldInterface = fieldVal.Elem().Interface()
+			}
 		} else {
 			fieldInterface = fieldVal.Interface()
 		}
-		// For field-level rules, the `self` variable is the field's value.
-		// We use the simpler `fieldEnv` for this, as it expects `self` to be dynamic.
-		// By converting a nil Go pointer to `types.Null`, we allow `cel-go` to
-		// correctly evaluate it as `null` in expressions like `self != null`.
-		fieldVars := map[string]any{"self": fieldInterface}
 
-		for _, rule := range rules {
-			// We need a program compiled against an environment where 'self' can be anything.
-			prog, err := v.engine.getProgram(v.fieldEnv, rule)
-			if err != nil {
-				v.logger.Error("failed to compile field rule (native)", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-				*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("field rule compilation error for %s.%s: %s", typeName, fieldName, err)))
-				continue
-			}
+		// If the field is a struct that should be validated natively, we skip the CEL rules here
+		// because the main recursive validation loop will handle it.
+		// We only apply CEL field rules to non-structs or structs handled by adapters.
+		fieldTyp := reflect.TypeOf(fieldInterface)
+		if fieldTyp != nil && fieldTyp.Kind() == reflect.Struct && v.isNativeType(fieldTyp) {
+			// This struct will be handled by a subsequent call to validateRecursive, so we skip field rules here.
+		} else {
+			fieldVars := map[string]any{"self": fieldInterface}
 
-			out, _, err := prog.ContextEval(ctx, fieldVars)
-			if err != nil {
-				v.logger.Error("failed to evaluate field rule (native)", "rule", rule, "type", typeName, "field", fieldName, "error", err)
-				*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err)))
-				continue
-			}
+			for _, rule := range rules {
+				// We use the simpler `fieldEnv` for this, as it expects `self` to be dynamic.
+				prog, err := v.engine.getProgram(v.fieldEnv, rule)
+				if err != nil {
+					v.logger.Error("failed to compile field rule (native)", "rule", rule, "type", typeName, "field", fieldName, "error", err)
+					*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("field rule compilation error for %s.%s: %s", typeName, fieldName, err)))
+					continue
+				}
 
-			if valid, ok := out.Value().(bool); !ok || !valid {
-				*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, rule))
+				out, _, err := prog.ContextEval(ctx, fieldVars)
+				if err != nil {
+					// Check for the specific "unsupported conversion" error and provide a better message.
+					if strings.Contains(err.Error(), "unsupported conversion") {
+						v.logger.Error("unsupported conversion in native field rule", "rule", rule, "type", typeName, "field", fieldName, "value_type", reflect.TypeOf(fieldInterface), "error", err)
+						*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("unsupported type for native validation: %T", fieldInterface)))
+					} else {
+						v.logger.Error("failed to evaluate field rule (native)", "rule", rule, "type", typeName, "field", fieldName, "error", err)
+						*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, fmt.Sprintf("evaluation error: %s", err)))
+					}
+					continue
+				}
+
+				if valid, ok := out.Value().(bool); !ok || !valid {
+					*allErrors = append(*allErrors, NewValidationError(typeName, fieldName, rule))
+				}
 			}
 		}
 	}

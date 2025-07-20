@@ -14,5 +14,23 @@
           "self != \"\""
       ]
     }
+  },
+  "github.com/podhmo/veritas/testdata/sources.Box[T]": {
+    "typeRules": [
+      "self.Value != null"
+    ],
+    "fieldRules": {
+      "Value": [
+        "self != null"
+      ]
+    }
+  },
+  "github.com/podhmo/veritas/testdata/sources.Item": {
+    "typeRules": null,
+    "fieldRules": {
+      "Name": [
+        "self != \"\""
+      ]
+    }
   }
 }
