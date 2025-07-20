@@ -1,10 +1,10 @@
 # CLI Reference
 
-The `veritas` command-line tool has two main functions: generating validation code and linting your validation rules.
+The `veritas` command-line tool has two main functions: generating validation code and linting your validation rules. The behavior is controlled by the `-lint` flag.
 
-## Code Generation (`veritas`)
+## Code Generation (Default)
 
-This is the default mode of the `veritas` tool. It scans your Go source files for struct annotations and generates Go code containing your validation rules.
+By default, the `veritas` tool scans your Go source files for struct annotations and generates Go code containing your validation rules.
 
 ### Usage
 
@@ -16,8 +16,8 @@ The generator is typically run via `go generate`.
 
 ### Flags
 
--   `-gen-type <TypeName>`: **(Required)** The name of the struct type to generate rules for.
--   `-out-name <filename.go>`: **(Required)** The name of the Go file to be generated.
+-   `-o <filename.go>`: **(Required)** The name of the Go file to be generated.
+-   `-pkg <package>`: The package name to use for the generated file. If not specified, it defaults to the package of the directory containing the file.
 
 ### Example
 
@@ -25,7 +25,7 @@ The generator is typically run via `go generate`.
 // file: models/user.go
 package models
 
-//go:generate go run github.com/podhmo/veritas/cmd/veritas -gen-type=User -out-name=veritas_gen.go
+//go:generate go run github.com/podhmo/veritas/cmd/veritas -o veritas_gen.go
 
 type User struct {
     // ...
@@ -34,17 +34,17 @@ type User struct {
 
 Running `go generate ./...` in your project will execute this command, creating `veritas_gen.go` in the `models` package.
 
-## Linting (`veritas -lint`)
+## Linting (`-lint` flag)
 
-The linter statically checks your `rules.json` files for common errors.
+When the `-lint` flag is provided, the tool switches to linting mode. It statically checks your validation rules for common errors.
 
 ### Usage
 
 ```bash
-veritas -lint [packages]
+go run github.com/podhmo/veritas/cmd/veritas -lint [packages]
 ```
 
-The linter recursively finds and analyzes `rules.json` files in the specified packages. If no packages are provided, it defaults to the current directory (`.`).
+The linter recursively finds and analyzes Go files in the specified packages. If no packages are provided, it defaults to the current directory (`.`).
 
 ### Checks
 

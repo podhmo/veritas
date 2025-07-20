@@ -10,7 +10,7 @@ The recommended approach is to use Go code generation for a type-safe, high-perf
     // file: models/user.go
     package models
 
-    //go:generate go run github.com/podhmo/veritas/cmd/veritas -gen-type=User -out-name=veritas_gen.go
+    //go:generate go run github.com/podhmo/veritas/cmd/veritas -o veritas_gen.go
 
     // @cel: self.Password == self.PasswordConfirm
     type User struct {
@@ -49,9 +49,10 @@ The recommended approach is to use Go code generation for a type-safe, high-perf
     )
 
     func main() {
-        // Create a new validator.
-        // Rules are automatically loaded from the generated code.
-        validator, err := veritas.NewValidator()
+    // Create a new validator, registering the types from the generated code.
+    validator, err := veritas.NewValidator(
+        veritas.WithTypes(models.GetKnownTypes()...),
+    )
         if err != nil {
             log.Fatalf("Failed to create validator: %v", err)
         }

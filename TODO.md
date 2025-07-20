@@ -151,43 +151,9 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 - [x] Refactor the analyzer for performance based on `docs/analyzer-tuning.md`.
   - This involved creating `parser.PackageInfo` to avoid redundant package loading by `veritas-gen`, updating the parser to use it, while keeping the original `Parse` method for backward compatibility.
 
-## Phase 8: Remove Adapter Pattern (Incremental)
+## Phase 8: Remove Adapter Pattern (Completed)
 
-**Goal**: Remove the `TypeAdapter` pattern to simplify the API and improve performance by using `cel-go`'s native struct support. This will be done incrementally to minimize risk. For more details, see [docs/remove-adapter-plan.md](docs/remove-adapter-plan.md).
+**Goal**: Removed the `TypeAdapter` pattern, simplifying the API and improving performance by using `cel-go`'s native struct support.
 
--   [x] **8.1: Introduce `WithTypes` Option**
-    -   [x] Create a new `ValidatorOption` called `WithTypes(types ...any)`.
-    -   [x] This option will take a variadic list of Go struct instances (e.g., `User{}`).
-    -   [x] Inside `NewValidator`, if this option is present, use the types to create a `cel.Env` with `ext.NativeTypes()`.
-    -   [x] The validation logic will be updated to use the native path if the new env is available, otherwise it will fall back to the existing adapter path.
-
--   [x] **8.2: Update `NewValidatorFromJSONFile`**
-    -   [x] Modify `NewValidatorFromJSONFile` to accept the new `WithTypes` option.
-    -   [x] Update its internal logic to pass the types to `NewValidator`.
-
--   [x] **8.3: Update `http-server` Example**
-    -   [x] Refactored `examples/http-server/main.go` to use the new `WithTypes` option.
-    -   [x] Removed the `TypeAdapter` from the example.
-    -   [x] Verified the example works as expected.
-    -   **Note**: This required fixing `getTypeName` to use full package paths and ensuring the `fieldEnv` included the standard library.
-
--   [x] **8.4: Enhance `veritas-gen` for Type Generation**
-    -   [x] Modify the `veritas-gen` tool (`--format=go`) to generate a new function, e.g., `GetKnownTypes() []any`.
-    -   [x] This function will return a slice of instances of all the types for which validation rules were generated (e.g., `[]any{User{}, Post{}}`).
-    -   **Status**: Done.
-
--   [x] **8.5: Update `gencode` Example**
-    -   [x] Refactor `examples/gencode/main.go` to call the new `GetKnownTypes()` function from the generated code.
-    -   **Status**: Done.
-
--   [ ] **8.6: Deprecate and Remove `TypeAdapter` (Postponed)**
-    -   **Note**: The full removal of the `TypeAdapter` is postponed due to complexities with `cel-go`'s native type support for generics and nil pointers. The `TypeAdapter` will remain as a fallback mechanism. The `WithTypes` option is now the recommended path for simple, non-generic structs. A more detailed plan for full removal is needed. See `docs/remove-adapter-plan.md` for a summary of the challenges.
-
--   [x] **8.7: Update Documentation**
-    -   [x] Update `README.md` and `docs/knowledge.md` to reflect the new, simpler API.
-    -   [x] Emphasized `WithTypes` as the recommended approach, and clarified that `TypeAdapter` is a legacy pattern retained for complex cases and backward compatibility.
-
--   [x] **8.8: Fully Support Native Generics and Pointers (New Task)**
-    -   [x] Investigated and implemented partial support for generic types within the `WithTypes` validation path. This includes type-specific environment caching and resolution of generic rule keys.
-    -   [x] Ensured `cel-go` correctly handles `nil` pointer fields without causing `unsupported conversion` errors. This was achieved by converting `nil` Go pointers to `types.Null` before evaluation, allowing rules like `self != null` to function correctly.
-    -   **[NOTE]** Full native support for generics is complex due to `cel-go`'s type system. A rule like `self.Value != null` will fail to compile if `Value` is a non-pointer type (e.g., `string`). For now, it is a library limitation that **rules for generic types must be compatible with all possible type arguments**. The workaround of ignoring "no matching overload" errors has been removed in favor of this explicit constraint. For example, instead of `self.Value != null`, a more robust rule might be `!has(self.Value) || self.Value != null` if the intent is to check for null only when the field is present, but even this has limitations. Users should write rules carefully for generic types.
+-   [x] **Summary**: Introduced a `WithTypes(...)` option to `NewValidator` to register Go structs directly with the `cel-go` environment. This is now the recommended approach. The `veritas-gen` tool was updated to generate a `GetKnownTypes()` function, making it easy to register all relevant types. The documentation and examples (`http-server`, `gencode`) have been updated to reflect this new, simpler API.
+-   **[NOTE]** The `TypeAdapter` pattern is retained as a legacy fallback for complex generic type scenarios where `cel-go`'s native support has limitations. Full native support for generics remains a challenge due to the static nature of CEL's type checking. Rules for generic types must be written to be compatible with all possible type instantiations.
