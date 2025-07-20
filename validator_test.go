@@ -608,7 +608,13 @@ func TestValidator_Validate_Native(t *testing.T) {
 		WithEngine(engine),
 		WithRuleProvider(provider),
 		WithLogger(logger),
-		WithTypes(sources.MockUser{}), // Enable native validation for MockUser
+		WithTypes(
+			sources.MockUser{}, // Enable native validation for MockUser
+			sources.Box[string]{},
+			sources.Box[*string]{},
+			sources.Box[*sources.Item]{},
+			sources.Item{},
+		),
 	)
 	if err != nil {
 		t.Fatalf("NewValidator() failed: %v", err)
@@ -675,6 +681,26 @@ func TestValidator_Validate_Native(t *testing.T) {
 				ID:    nil, // Fails "self != null"
 			},
 			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "ID", `self != null`),
+		},
+		{
+			name:    "valid generic struct with string - native",
+			obj:     &sources.Box[string]{Value: "hello"},
+			wantErr: nil,
+		},
+		{
+			name:    "invalid generic struct with nil pointer - native",
+			obj:     &sources.Box[*string]{Value: nil},
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.Box[T]", "Value", "self != null"),
+		},
+		{
+			name:    "valid generic struct with struct pointer - native",
+			obj:     &sources.Box[*sources.Item]{Value: &sources.Item{Name: "valid-item"}},
+			wantErr: nil,
+		},
+		{
+			name:    "invalid generic struct with invalid nested struct - native",
+			obj:     &sources.Box[*sources.Item]{Value: &sources.Item{Name: ""}}, // name is required
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.Item", "Name", `self != ""`),
 		},
 	}
 
