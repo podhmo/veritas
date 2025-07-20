@@ -160,7 +160,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 ## Phase 9: One-File Code Injection
 
-**Goal**: Add the ability to inject or update a `setupValidation` function in a single Go file.
+**Goal**: Add the ability to inject or update a `setupValidation` function in a single Go file. (See `docs/onefile-injection.md` for details)
 
 - [ ] Implement the `-inject` flag in `cmd/veritas`.
 - [ ] Implement the AST parsing logic to find `setupValidation`.
