@@ -155,11 +155,11 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Remove the `TypeAdapter` pattern to simplify the API and improve performance by using `cel-go`'s native struct support. This will be done incrementally to minimize risk. For more details, see [docs/remove-adapter-plan.md](docs/remove-adapter-plan.md).
 
--   [ ] **8.1: Introduce `WithTypes` Option**
-    -   [ ] Create a new `ValidatorOption` called `WithTypes(types ...any)`.
-    -   [ ] This option will take a variadic list of Go struct instances (e.g., `User{}`).
-    -   [ ] Inside `NewValidator`, if this option is present, use the types to create a `cel.Env` with `ext.NativeTypes()`.
-    -   [ ] The validation logic will be updated to use the native path if the new env is available, otherwise it will fall back to the existing adapter path.
+-   [x] **8.1: Introduce `WithTypes` Option**
+    -   [x] Create a new `ValidatorOption` called `WithTypes(types ...any)`.
+    -   [x] This option will take a variadic list of Go struct instances (e.g., `User{}`).
+    -   [x] Inside `NewValidator`, if this option is present, use the types to create a `cel.Env` with `ext.NativeTypes()`.
+    -   [x] The validation logic will be updated to use the native path if the new env is available, otherwise it will fall back to the existing adapter path.
 
 -   [ ] **8.2: Update `NewValidatorFromJSONFile`**
     -   [ ] Modify `NewValidatorFromJSONFile` to accept the new `WithTypes` option.
