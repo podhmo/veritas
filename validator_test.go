@@ -594,6 +594,107 @@ func TestValidator_Validate(t *testing.T) {
 	}
 }
 
+func TestValidator_Validate_Native(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	engine, err := NewEngine(logger, DefaultFunctions()...)
+	if err != nil {
+		t.Fatalf("NewEngine() failed: %v", err)
+	}
+
+	provider := NewJSONRuleProvider("testdata/rules/user_native.json")
+
+	// Create a new validator with the native types.
+	validator, err := NewValidator(
+		WithEngine(engine),
+		WithRuleProvider(provider),
+		WithLogger(logger),
+		WithTypes(sources.MockUser{}), // Enable native validation for MockUser
+	)
+	if err != nil {
+		t.Fatalf("NewValidator() failed: %v", err)
+	}
+
+	intPtr := func(i int) *int { return &i }
+
+	tests := []struct {
+		name    string
+		obj     any
+		wantErr error
+	}{
+		{
+			name: "valid object - native",
+			obj: &sources.MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   20,
+				ID:    intPtr(1),
+			},
+			wantErr: nil,
+		},
+		{
+			name: "invalid field - native",
+			obj: &sources.MockUser{
+				Name:  "Gopher",
+				Email: "invalid-email",
+				Age:   20,
+				ID:    intPtr(1),
+			},
+			// Note: The rule for Email is in FieldRules, but in native mode, it's evaluated
+			// against the whole object.
+			wantErr: NewValidationError("sources.MockUser", "Email", `self.Email != "" && self.Email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
+		},
+		{
+			name: "type rule violation - native",
+			obj: &sources.MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   17, // Fails "self.Age >= 18"
+				ID:    intPtr(1),
+			},
+			wantErr: NewValidationError("sources.MockUser", "", "self.Age >= 18"),
+		},
+		{
+			name: "multiple errors - native",
+			obj: &sources.MockUser{
+				Name:  "", // Fails "self.Name != """
+				Email: "invalid-email",
+				Age:   17, // Fails "self.Age >= 18"
+				ID:    nil,
+			},
+			wantErr: errors.Join(
+				NewValidationError("sources.MockUser", "", "self.Age >= 18"),
+				NewValidationError("sources.MockUser", "Name", `self.Name != ""`),
+				NewValidationError("sources.MockUser", "Email", `self.Email != "" && self.Email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
+				NewValidationError("sources.MockUser", "ID", `has(self.ID)`),
+			),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotErr := validator.Validate(context.Background(), tt.obj)
+
+			if (tt.wantErr == nil && gotErr != nil) || (tt.wantErr != nil && gotErr == nil) {
+				t.Errorf("Validate() error mismatch\nwant: %v\ngot:  %v", tt.wantErr, gotErr)
+				return
+			}
+			if tt.wantErr != nil && gotErr != nil {
+				// Use string comparison for joined errors as order is not guaranteed.
+				wantStr := tt.wantErr.Error()
+				gotStr := gotErr.Error()
+
+				// Simple check for presence of all parts
+				wantParts := strings.Split(wantStr, "\n")
+				for _, part := range wantParts {
+					if !strings.Contains(gotStr, part) {
+						t.Errorf("Validate() error mismatch\nwant contains: %s\ngot:           %s", part, gotStr)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestValidator_WithGlobalRegistry(t *testing.T) {
 	// A simple logger for testing.
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))

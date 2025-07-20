@@ -1,0 +1,18 @@
+{
+  "sources.MockUser": {
+    "typeRules": [
+      "self.Age >= 18"
+    ],
+    "fieldRules": {
+      "Email": [
+        "self.Email != \"\" && self.Email.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
+      ],
+      "ID": [
+        "has(self.ID)"
+      ],
+      "Name": [
+        "self.Name != \"\""
+      ]
+    }
+  }
+}
