@@ -67,3 +67,33 @@ The user has requested that I only create this document. The following is a prop
     -   Update all other relevant documentation.
 
 By following this plan, we can completely remove the `TypeAdapter` pattern, resulting in a simpler, faster, and more user-friendly API for `veritas`.
+
+## 4. Update: Failed Attempt to Remove Adapter
+
+An attempt was made to implement the plan above, but it was unsuccessful due to a persistent `unsupported type` error from the `cel-go` library.
+
+### What Was Tried
+
+1.  **`cel.Types()` in `NewEnv`**: The initial approach was to pass the user's Go struct types directly to the `cel.NewEnv()` function using the `cel.Types()` option.
+    -   **Expected**: The CEL environment would be created with knowledge of the struct types, allowing direct validation.
+    -   **Actual**: The `cel.NewEnv()` call itself failed with an `unsupported type` error. For example, when running the tests, the following error was observed:
+        ```
+        validator_test.go:45: NewValidator() failed: failed to create object CEL environment: unsupported type: sources.Password
+        ```
+
+2.  **`cel.Env.Extend()`**: The next attempt was to create a base CEL environment and then use `env.Extend(cel.Types(...))` to add the struct types after the fact.
+    -   **Expected**: The environment would be successfully extended to include the new types.
+    -   **Actual**: This also failed with the same `unsupported type` error:
+        ```
+        validator_test.go:45: NewValidator() failed: failed to extend object CEL environment with types: unsupported type: sources.Password
+        ```
+
+3.  **`cel.Variable("self", types.DynType)`**: To make the environment as flexible as possible, the `self` variable was changed from `types.NewMapType(...)` to `types.DynType`.
+    -   **Expected**: This might allow CEL to bypass strict type checking during environment setup and handle the struct at evaluation time.
+    -   **Actual**: The `unsupported type` error persisted, indicating the issue is with type registration itself, not just the variable declaration. The error message remained the same.
+
+### Conclusion
+
+The investigation was unable to resolve the `unsupported type` error when using `cel.Types()`. It appears that `cel-go`'s native struct support may have specific requirements or limitations that were not immediately apparent from the documentation, or there may be a more fundamental issue with how the types are being passed.
+
+As a result, all changes related to this effort were reverted, and the `TypeAdapter` pattern will remain in place for the time being. This experience is documented in `TODO.md` as an issue to be revisited.

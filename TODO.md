@@ -182,3 +182,11 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [ ] Update `README.md` to reflect the new, simpler API.
     -   [ ] Update the `examples/http-server/main.go` to remove the `TypeAdapter` and use the new `WithTypes` option.
     -   [ ] Update all other relevant documentation.
+
+- [ ] **ISSUE: `unsupported type` error when using `cel.Types()`**
+    - I attempted to remove the adapter pattern by using `cel.Types()` to register the Go structs with `cel-go`. However, this resulted in an `unsupported type` error at runtime.
+    - **What I tried:**
+        - Passing the types to `cel.NewEnv()` using the `cel.Types()` option.
+        - Extending the `cel.Env` with the types after it was created.
+        - Changing the "self" variable to `types.DynType`.
+    - **Conclusion:** None of these approaches worked. It seems that `cel-go`'s support for native Go structs is not as straightforward as I had hoped. I have reverted all changes related to this effort. The adapter pattern will remain in place for now.
