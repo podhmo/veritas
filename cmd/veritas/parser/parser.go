@@ -47,19 +47,20 @@ func NewParser(logger *slog.Logger) *Parser {
 	return &Parser{logger: logger}
 }
 
-func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error) {
+func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, []TypeInfo, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
 	}
 	pkgs, err := packages.Load(cfg, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load packages: %w", err)
+		return nil, nil, fmt.Errorf("failed to load packages: %w", err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("errors occurred while loading packages")
+		return nil, nil, fmt.Errorf("errors occurred while loading packages")
 	}
 
 	ruleSets := make(map[string]veritas.ValidationRuleSet)
+	knownTypesMap := make(map[string]TypeInfo) // Use map to handle duplicates
 
 	for _, pkg := range pkgs {
 		info := PackageInfo{
@@ -68,22 +69,39 @@ func (p *Parser) Parse(path string) (map[string]veritas.ValidationRuleSet, error
 			TypesInfo: pkg.TypesInfo,
 			Types:     pkg.Types,
 		}
-		rules, err := p.ParseDirectly(info)
+		rules, types, err := p.ParseDirectly(info)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse directly for package %s: %w", pkg.PkgPath, err)
+			return nil, nil, fmt.Errorf("failed to parse directly for package %s: %w", pkg.PkgPath, err)
 		}
 		for k, v := range rules {
 			ruleSets[k] = v
 		}
+		for _, ti := range types {
+			knownTypesMap[ti.PackagePath+"."+ti.TypeName] = ti
+		}
 	}
 
-	return ruleSets, nil
+	// Convert map back to slice
+	var knownTypes []TypeInfo
+	for _, ti := range knownTypesMap {
+		knownTypes = append(knownTypes, ti)
+	}
+
+	return ruleSets, knownTypes, nil
+}
+
+// TypeInfo holds information about a type for which rules were generated.
+type TypeInfo struct {
+	PackagePath string
+	PackageName string
+	TypeName    string
 }
 
 // ParseDirectly parses validation rules from the given package information
 // without loading packages itself.
-func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationRuleSet, error) {
+func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationRuleSet, []TypeInfo, error) {
 	ruleSets := make(map[string]veritas.ValidationRuleSet)
+	var knownTypes []TypeInfo
 
 	for _, f := range info.Syntax {
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -140,13 +158,19 @@ func (p *Parser) ParseDirectly(info PackageInfo) (map[string]veritas.ValidationR
 				if len(ruleSet.TypeRules) > 0 || len(ruleSet.FieldRules) > 0 {
 					fullTypeName := fmt.Sprintf("%s.%s", info.PkgPath, structName)
 					ruleSets[fullTypeName] = ruleSet
+					// NOTE: typeSpec.Name.Name does not include generic parameters.
+					knownTypes = append(knownTypes, TypeInfo{
+						PackagePath: info.PkgPath,
+						PackageName: info.Types.Name(),
+						TypeName:    typeSpec.Name.Name,
+					})
 				}
 			}
 			return true
 		})
 	}
 
-	return ruleSets, nil
+	return ruleSets, knownTypes, nil
 }
 
 func (p *Parser) extractRulesForStruct(info PackageInfo, structType *ast.StructType, ruleSet *veritas.ValidationRuleSet) {
