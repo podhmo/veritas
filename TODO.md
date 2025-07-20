@@ -189,4 +189,4 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 -   [ ] **8.8: Fully Support Native Generics and Pointers (New Task)**
     -   [ ] Investigate and implement robust support for generic types within the `WithTypes` validation path.
-    -   [ ] Ensure `cel-go` correctly handles `nil` pointer fields without causing `unsupported conversion` errors, potentially by contributing upstream or finding a reliable workaround.
+    -   [x] Ensure `cel-go` correctly handles `nil` pointer fields without causing `unsupported conversion` errors. This was achieved by converting `nil` Go pointers to `types.Null` before evaluation, allowing rules like `self != null` to function correctly.
