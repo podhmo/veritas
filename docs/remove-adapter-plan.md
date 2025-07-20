@@ -77,3 +77,33 @@ The user has requested that I only create this document. The following is a prop
     -   Update all other relevant documentation.
 
 By following this plan, we can completely remove the `TypeAdapter` pattern, resulting in a simpler, faster, and more user-friendly API for `veritas`.
+
+## 4. Implementation Challenges and Future Work
+
+During the implementation of the plan to remove the `TypeAdapter`, several challenges were encountered, revealing complexities in `cel-go`'s native type support, especially concerning generic types and environment management.
+
+### Key Challenges
+
+1.  **`overlapping identifier` Error**:
+    -   **Problem**: When creating a single `cel.Env` for multiple types using `WithTypes`, repeatedly calling `cel.Variable("self", ...)` for each type resulted in an "overlapping identifier" error. The `self` variable was being redefined in the same environment.
+    -   **Initial Attempt**: We tried to declare `self` as a `types.DynType` once. However, this caused `no such key` errors during evaluation because the environment lost the specific field information for each struct.
+    -   **Solution**: The final approach was to create and cache a separate `cel.Env` for each `reflect.Type`. This ensures that each environment is configured with the correct type information for `self` without causing identifier conflicts. A `getNativeEnv(typ reflect.Type)` method was introduced to manage this cache.
+
+2.  **`unsupported conversion to ref.Val` for Nil Pointers**:
+    -   **Problem**: When a native struct field with a pointer type was `nil`, `cel-go`'s `ContextEval()` would return an `unsupported conversion` error. The adapter-based path handled this gracefully, but the native path did not.
+    -   **Solution**: A `nil` check was added in the `validateNative` function before attempting to validate pointer fields. If a pointer is `nil`, validation on that field is skipped, with the assumption that a `required` or `nonzero` rule would catch it if the `nil` value is not allowed.
+
+3.  **Inconsistent Rule Keys**:
+    -   **Problem**: The `veritas-gen` tool generated fully qualified type names (e.g., `github.com/user/project/def.User`) as keys for the rule registry. However, the `getTypeName` method in the validator was generating a shorter, package-relative name (e.g., `def.User`). This mismatch caused rule lookup failures.
+    -   **Solution**: The `getTypeName` method was updated to always generate the full package path, ensuring consistency between generated code and runtime lookup. This required updating handwritten rule files in test cases as well.
+
+4.  **Generic Type Instantiation**:
+    -   **Problem**: `cel-go`'s `ext.NativeTypes` requires a concrete `reflect.Type`. For a generic type like `Box[T]`, we need to provide a real instantiation, such as `Box[string]{}`. The `veritas-gen` tool was updated to generate a `GetKnownTypes() []any` function, but it currently uses `any` as a placeholder for generic type parameters (e.g., `Box[any]{}`). This is a simplification and may not cover all use cases.
+
+### Future Work
+
+The `TypeAdapter` pattern has not been fully removed. It remains the fallback for types not explicitly registered via `WithTypes`. The complete removal is postponed and tracked in `TODO.md` under a new, more detailed task. The primary focus of future work will be:
+
+-   **Robust Generic Type Support**: Investigate a more robust way to handle generic type parameters in `veritas-gen` and the runtime validator to ensure correct `cel.Env` setup for any generic instantiation.
+-   **Finalize API**: Once the native path is feature-complete and stable for all supported types (including generics, pointers, slices, and maps), the `TypeAdapter` and its related options can be fully deprecated and removed.
+-   **Comprehensive Documentation**: Update all documentation to reflect the new `WithTypes`-first approach and provide clear guidance on handling complex and generic types.
