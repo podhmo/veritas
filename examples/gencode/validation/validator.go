@@ -1,7 +1,8 @@
-package def
+package validation
 
 import (
-	"github.com/podhmo/veritas"
+	veritas "github.com/podhmo/veritas"
+	def "github.com/podhmo/veritas/examples/gencode/def"
 )
 
 func init() {
@@ -15,4 +16,11 @@ func init() {
 			},
 		},
 	})
+}
+
+// GetKnownTypes returns a list of all types that have validation rules.
+func GetKnownTypes() []any {
+	return []any{
+		def.User{},
+	}
 }

@@ -206,7 +206,6 @@ func (v *Validator) Validate(ctx context.Context, obj any) error {
 	if val.Kind() != reflect.Struct {
 		return nil // Or perhaps an error? For now, we only validate structs.
 	}
-	typ := val.Type()
 
 	// Use a helper function to perform the validation recursively.
 	v.validateRecursive(ctx, obj, &allErrors)
