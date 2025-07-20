@@ -26,9 +26,13 @@ The robust solution was to pivot from creating a single, universal environment t
 
 ### Current Status and Future Work
 
-The `TypeAdapter` pattern has not been fully removed. It remains a fallback for types not registered via `WithTypes` and for complex cases like **generic types**, which are not yet fully supported by the new native path.
+The `WithTypes` option is the recommended approach for native struct validation.
 
-The full removal of the adapter pattern is postponed until robust support for generics and other complex types is implemented in the native validation path.
+The legacy `TypeAdapter` pattern has not been fully removed. It is retained as a fallback mechanism for two main reasons:
+1.  **Complex Scenarios**: It can still be useful in situations where `WithTypes` is not a good fit.
+2.  **Unsupported Types**: It provides a path for handling types that are not yet fully supported by the native validation path, such as **generic types**.
+
+The complete removal of the `TypeAdapter` is postponed until the native validation path achieves feature parity, particularly with robust support for generics.
 
 ## 2. Development Workflow Principles
 
