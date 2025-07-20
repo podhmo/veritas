@@ -16,9 +16,7 @@
     }
   },
   "github.com/podhmo/veritas/testdata/sources.Box[T]": {
-    "typeRules": [
-      "self.Value != null"
-    ],
+    "typeRules": [],
     "fieldRules": {
       "Value": [
         "self != null"

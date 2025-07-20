@@ -688,12 +688,9 @@ func TestValidator_Validate_Native(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "invalid generic struct with nil pointer - native",
-			obj:  &sources.Box[*string]{Value: nil},
-			wantErr: errors.Join(
-				NewValidationError("github.com/podhmo/veritas/testdata/sources.Box[T]", "", "self.Value != null"),
-				NewValidationError("github.com/podhmo/veritas/testdata/sources.Box[T]", "Value", "self != null"),
-			),
+			name:    "invalid generic struct with nil pointer - native",
+			obj:     &sources.Box[*string]{Value: nil},
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.Box[T]", "Value", "self != null"),
 		},
 		{
 			name:    "valid generic struct with struct pointer - native",

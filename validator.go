@@ -405,13 +405,6 @@ func (v *Validator) validateNative(ctx context.Context, obj any, typ reflect.Typ
 	for _, rule := range ruleSet.TypeRules {
 		prog, err := v.engine.getProgram(nativeEnv, rule)
 		if err != nil {
-			// This is a workaround. For generic types, a rule like `self.Value != null` can
-			// fail with "no matching overload" if `Value` is a non-nullable type like `string`.
-			// We choose to ignore this specific compilation error.
-			if strings.Contains(err.Error(), "no matching overload") {
-				v.logger.Debug("ignored 'no matching overload' compilation error for generic type rule", "rule", rule, "type", typeName, "error", err)
-				continue // Skip this rule
-			}
 			v.logger.Error("failed to compile type rule (native)", "rule", rule, "type", typeName, "error", err)
 			*allErrors = append(*allErrors, NewFatalError(fmt.Sprintf("type rule compilation error for %s: %s", typeName, err)))
 			continue

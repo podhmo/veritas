@@ -187,6 +187,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] Update `README.md` and `docs/knowledge.md` to reflect the new, simpler API.
     -   [x] Emphasized `WithTypes` as the recommended approach, and clarified that `TypeAdapter` is a legacy pattern retained for complex cases and backward compatibility.
 
--   [ ] **8.8: Fully Support Native Generics and Pointers (New Task)**
-    -   [ ] Investigate and implement robust support for generic types within the `WithTypes` validation path.
-    -   [x] Ensure `cel-go` correctly handles `nil` pointer fields without causing `unsupported conversion` errors. This was achieved by converting `nil` Go pointers to `types.Null` before evaluation, allowing rules like `self != null` to function correctly.
+-   [x] **8.8: Fully Support Native Generics and Pointers (New Task)**
+    -   [x] Investigated and implemented partial support for generic types within the `WithTypes` validation path. This includes type-specific environment caching and resolution of generic rule keys.
+    -   [x] Ensured `cel-go` correctly handles `nil` pointer fields without causing `unsupported conversion` errors. This was achieved by converting `nil` Go pointers to `types.Null` before evaluation, allowing rules like `self != null` to function correctly.
+    -   **[NOTE]** Full native support for generics is complex due to `cel-go`'s type system. A rule like `self.Value != null` will fail to compile if `Value` is a non-pointer type (e.g., `string`). For now, it is a library limitation that **rules for generic types must be compatible with all possible type arguments**. The workaround of ignoring "no matching overload" errors has been removed in favor of this explicit constraint. For example, instead of `self.Value != null`, a more robust rule might be `!has(self.Value) || self.Value != null` if the intent is to check for null only when the field is present, but even this has limitations. Users should write rules carefully for generic types.
