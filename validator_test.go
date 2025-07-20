@@ -840,6 +840,139 @@ func BenchmarkValidator_Validate_Invalid_NoCache(b *testing.B) {
 	}
 }
 
+func TestValidator_NewValidatorFromJSONFile_WithTypesAndAdapters(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	intPtr := func(i int) *int { return &i }
+
+	// Define adapters for types that will NOT be handled natively.
+	adapters := map[reflect.Type]TypeAdapterTarget{
+		reflect.TypeOf(sources.Profile{}): {TargetName: "sources.Profile", Adapter: profileAdapter},
+	}
+
+	// Create a validator using the convenience function, passing both WithTypes and WithTypeAdapters.
+	// MockUser will be handled by the native path, Profile by the adapter path.
+	validator, err := NewValidatorFromJSONFile(
+		"testdata/rules/user_and_profile.json",
+		WithLogger(logger),
+		WithTypes(sources.MockUser{}), // Native validation
+		WithTypeAdapters(adapters),    // Adapter-based validation
+	)
+	if err != nil {
+		t.Fatalf("NewValidatorFromJSONFile() failed: %v", err)
+	}
+
+	// This struct contains one natively validated field and one adapter-validated field.
+	type Combined struct {
+		User    sources.MockUser
+		Profile sources.Profile
+	}
+
+	tests := []struct {
+		name    string
+		obj     any
+		wantErr error
+		errMsgs []string
+	}{
+		{
+			name: "both valid",
+			obj: &Combined{
+				User: sources.MockUser{
+					Name:  "Gopher",
+					Email: "gopher@golang.org",
+					Age:   25,
+					ID:    intPtr(1),
+				},
+				Profile: sources.Profile{
+					Platform: "github",
+					Handle:   "gopher",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "native invalid, adapter valid",
+			obj: &Combined{
+				User: sources.MockUser{
+					Name:  "Gopher",
+					Email: "invalid-email", // <-- native validation failure
+					Age:   25,
+					ID:    intPtr(1),
+				},
+				Profile: sources.Profile{
+					Platform: "github",
+					Handle:   "gopher",
+				},
+			},
+			wantErr: NewValidationError("sources.MockUser", "Email", `self.Email != "" && self.Email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
+		},
+		{
+			name: "native valid, adapter invalid",
+			obj: &Combined{
+				User: sources.MockUser{
+					Name:  "Gopher",
+					Email: "gopher@golang.org",
+					Age:   25,
+					ID:    intPtr(1),
+				},
+				Profile: sources.Profile{
+					Platform: "github",
+					Handle:   "go", // <-- adapter validation failure
+				},
+			},
+			wantErr: NewValidationError("sources.Profile", "Handle", `self != "" && self.size() > 2`),
+		},
+		{
+			name: "both invalid",
+			obj: &Combined{
+				User: sources.MockUser{
+					Name:  "", // <-- native validation failure
+					Email: "gopher@golang.org",
+					Age:   25,
+					ID:    intPtr(1),
+				},
+				Profile: sources.Profile{
+					Platform: "", // <-- adapter validation failure
+					Handle:   "gopher",
+				},
+			},
+			errMsgs: []string{
+				NewValidationError("sources.MockUser", "Name", `self.Name != ""`).Error(),
+				NewValidationError("sources.Profile", "Platform", `self != ""`).Error(),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotErr := validator.Validate(context.Background(), tt.obj)
+
+			if len(tt.errMsgs) > 0 {
+				if gotErr == nil {
+					t.Fatalf("Validate() expected errors, got nil")
+				}
+				errStr := gotErr.Error()
+				for _, msg := range tt.errMsgs {
+					if !strings.Contains(errStr, msg) {
+						t.Errorf("Validate() error missing expected content '%s' in '%s'", msg, errStr)
+					}
+				}
+				return
+			}
+
+			if (tt.wantErr == nil) != (gotErr == nil) {
+				t.Errorf("Validate() error mismatch\nwant: %v\ngot:  %v", tt.wantErr, gotErr)
+				return
+			}
+
+			if tt.wantErr != nil && gotErr != nil {
+				if tt.wantErr.Error() != gotErr.Error() {
+					t.Errorf("Validate() error content mismatch\nwant: %s\ngot:  %s", tt.wantErr.Error(), gotErr.Error())
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkValidator_Validate_Invalid_WithCache(b *testing.B) {
 	validator, _, invalidUser := setupBenchmark(b)
 	ctx := context.Background()
