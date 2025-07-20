@@ -11,6 +11,7 @@ import (
 
 	"github.com/gostaticanalysis/codegen"
 	"github.com/podhmo/veritas"
+	"github.com/podhmo/veritas/cmd/veritas/gen/injection"
 	"github.com/podhmo/veritas/cmd/veritas/parser"
 )
 
@@ -19,6 +20,7 @@ const doc = "gogen is a tool to generate validation code from Go source code."
 var (
 	flagOutput  string
 	flagPackage string
+	flagInject  string
 )
 
 var Generator = &codegen.Generator{
@@ -30,6 +32,7 @@ var Generator = &codegen.Generator{
 func init() {
 	Generator.Flags.StringVar(&flagOutput, "o", "", "output file name")
 	Generator.Flags.StringVar(&flagPackage, "pkg", "validation", "package name")
+	Generator.Flags.StringVar(&flagInject, "inject", "", "inject code to file")
 }
 
 func run(pass *codegen.Pass) error {
@@ -53,6 +56,10 @@ func run(pass *codegen.Pass) error {
 	if len(ruleSets) == 0 {
 		return nil
 	}
+	if flagInject != "" {
+		return injection.Inject(flagInject, pass.Pkg.Name(), ruleSets, knownTypes)
+	}
+
 	gen := &GoCodeGenerator{
 		logger: logger,
 	}
@@ -103,8 +110,8 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	}
 	fmt.Fprintf(&buf, ")\n\n")
 
-	// 3. Print init function
-	fmt.Fprintf(&buf, "func init() {\n")
+	// 3. Print setupValidation function
+	fmt.Fprintf(&buf, "func setupValidation() {\n")
 	// Sort keys for deterministic output
 	keys := make([]string, 0, len(ruleSets))
 	for k := range ruleSets {
@@ -142,7 +149,12 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	}
 	fmt.Fprintf(&buf, "}\n\n")
 
-	// 4. Print GetKnownTypes function
+	// 4. Print init function
+	fmt.Fprintf(&buf, "func init() {\n")
+	fmt.Fprintf(&buf, "\tsetupValidation()\n")
+	fmt.Fprintf(&buf, "}\n\n")
+
+	// 5. Print GetKnownTypes function
 	fmt.Fprintf(&buf, "// GetKnownTypes returns a list of all types that have validation rules.\n")
 	fmt.Fprintf(&buf, "func GetKnownTypes() []any {\n")
 	fmt.Fprintf(&buf, "\treturn []any{\n")
