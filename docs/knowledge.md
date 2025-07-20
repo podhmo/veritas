@@ -57,3 +57,17 @@ The issue manifested as a persistent `unsupported type` error originating from `
 After exhausting all reasonable avenues, the conclusion is that `cel.Types()` does not function as expected for dynamically registering arbitrary Go structs in the context of this project. The root cause is likely a subtle interaction within `cel-go`'s type system, a version-specific bug, or a misunderstanding of a core, undocumented constraint.
 
 Since the primary goal is to deliver a functional validator, clinging to a broken mechanism is counterproductive. The only reliable path forward is to **shift the responsibility of type adaptation to the user**. By requiring the user to provide a `TypeAdapter` function, we work *with* `cel-go`'s type system instead of fighting against it. This sacrifices the "magic" of automatic registration but guarantees correctness and stability.
+
+## Development Workflow Principles
+
+### Documentation-First Approach for Complex Tasks
+
+When undertaking complex or high-risk tasks, such as major refactoring or implementing features with unclear paths, it is crucial to prioritize documentation.
+
+**Procedure:**
+1.  **Initial Analysis and Plan**: Before writing code, document the problem, the proposed solution, and a step-by-step implementation plan in a dedicated markdown file (e.g., `docs/feature-plan.md`).
+2.  **Record Progress and Setbacks**: As work progresses, update this document with findings, especially any setbacks, failed attempts, or changes in direction.
+3.  **Prioritize Documentation Commits**: If a task is paused or completed, the first action should be to commit the updated documentation. This ensures that valuable knowledge and context are preserved, even if the associated code changes are discarded or postponed.
+
+**Rationale**:
+This practice ensures that the "why" behind a decision is never lost. If a developer (including our AI agent, Jules) has to revisit the task later, the document provides a clear record of what was tried and why certain paths were abandoned. This prevents repeating failed experiments and provides a solid foundation for future efforts. For example, the detailed log of attempts to remove the `TypeAdapter` pattern in `docs/remove-adapter-plan.md` is a critical asset for future development.
