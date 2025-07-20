@@ -97,7 +97,7 @@ func TestParser(t *testing.T) {
 		}
 
 		// Parse the directory containing the test file.
-		got, err := p.Parse("github.com/podhmo/veritas/testdata/sources")
+		got, _, err := p.Parse("github.com/podhmo/veritas/testdata/sources")
 		if err != nil {
 			t.Fatalf("Parse() error = %v, want nil", err)
 		}

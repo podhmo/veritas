@@ -1,17 +1,17 @@
 {
-    "sources.MockUser": {
+    "github.com/podhmo/veritas/testdata/sources.MockUser": {
         "typeRules": [
             "self.Age >= 18"
         ],
         "fieldRules": {
             "Name": [
-                "self.Name != \"\""
+                "self != \"\""
             ],
             "Email": [
-                "self.Email != \"\" && self.Email.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
+                "self != \"\" && self.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
             ],
             "ID": [
-                "has(self.ID)"
+                "self != null"
             ]
         }
     },

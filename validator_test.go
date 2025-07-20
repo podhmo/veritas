@@ -900,7 +900,7 @@ func TestValidator_NewValidatorFromJSONFile_WithTypesAndAdapters(t *testing.T) {
 					Handle:   "gopher",
 				},
 			},
-			wantErr: NewValidationError("sources.MockUser", "Email", `self.Email != "" && self.Email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
 		},
 		{
 			name: "native valid, adapter invalid",
@@ -933,7 +933,7 @@ func TestValidator_NewValidatorFromJSONFile_WithTypesAndAdapters(t *testing.T) {
 				},
 			},
 			errMsgs: []string{
-				NewValidationError("sources.MockUser", "Name", `self.Name != ""`).Error(),
+				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Name", `self != ""`).Error(),
 				NewValidationError("sources.Profile", "Platform", `self != ""`).Error(),
 			},
 		},

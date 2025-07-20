@@ -171,14 +171,14 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] Verified the example works as expected.
     -   **Note**: This required fixing `getTypeName` to use full package paths and ensuring the `fieldEnv` included the standard library.
 
--   [ ] **8.4: Enhance `veritas-gen` for Type Generation**
-    -   [ ] Modify the `veritas-gen` tool (`--format=go`) to generate a new function, e.g., `GetKnownTypes() []any`.
-    -   [ ] This function will return a slice of instances of all the types for which validation rules were generated (e.g., `[]any{User{}, Post{}}`).
-    -   **Status**: Postponed. The implementation is complex due to cross-package type references.
+-   [x] **8.4: Enhance `veritas-gen` for Type Generation**
+    -   [x] Modify the `veritas-gen` tool (`--format=go`) to generate a new function, e.g., `GetKnownTypes() []any`.
+    -   [x] This function will return a slice of instances of all the types for which validation rules were generated (e.g., `[]any{User{}, Post{}}`).
+    -   **Status**: Done.
 
--   [ ] **8.5: Update `gencode` Example**
-    -   [ ] Refactor `examples/gencode/main.go` to call the new `GetKnownTypes()` function from the generated code.
-    -   **Status**: Postponed.
+-   [x] **8.5: Update `gencode` Example**
+    -   [x] Refactor `examples/gencode/main.go` to call the new `GetKnownTypes()` function from the generated code.
+    -   **Status**: Done.
 
 -   [ ] **8.6: Deprecate and Remove `TypeAdapter` (Postponed)**
     -   **Note**: The full removal of the `TypeAdapter` is postponed due to complexities with `cel-go`'s native type support for generics and nil pointers. The `TypeAdapter` will remain as a fallback mechanism. The `WithTypes` option is now the recommended path for simple, non-generic structs. A more detailed plan for full removal is needed. See `docs/remove-adapter-plan.md` for a summary of the challenges.

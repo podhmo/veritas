@@ -1,5 +1,5 @@
 {
-  "sources.MockUser": {
+  "github.com/podhmo/veritas/testdata/sources.MockUser": {
     "typeRules": [
       "self.Age >= 18"
     ],
