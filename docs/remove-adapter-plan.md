@@ -91,7 +91,8 @@ During the implementation of the plan to remove the `TypeAdapter`, several chall
 
 2.  **`unsupported conversion to ref.Val` for Nil Pointers**:
     -   **Problem**: When a native struct field with a pointer type was `nil`, `cel-go`'s `ContextEval()` would return an `unsupported conversion` error. The adapter-based path handled this gracefully, but the native path did not.
-    -   **Solution**: A `nil` check was added in the `validateNative` function before attempting to validate pointer fields. If a pointer is `nil`, validation on that field is skipped, with the assumption that a `required` or `nonzero` rule would catch it if the `nil` value is not allowed.
+    -   **Initial Solution**: A `nil` check was added in the `validateNative` function to skip validation for `nil` pointer fields. This prevented the crash but meant that rules like `self != null` could not be enforced on these fields.
+    -   **Final Solution**: The logic was refined. Instead of skipping validation, `nil` Go pointers are now explicitly converted to a `cel.Val` representing `null` (using `types.DefaultTypeAdapter.NativeToValue(nil)`). This allows `cel-go`'s engine to correctly handle the `null` value, enabling rules like `self != null` to work as expected for native pointer fields.
 
 3.  **Inconsistent Rule Keys**:
     -   **Problem**: The `veritas-gen` tool generated fully qualified type names (e.g., `github.com/user/project/def.User`) as keys for the rule registry. However, the `getTypeName` method in the validator was generating a shorter, package-relative name (e.g., `def.User`). This mismatch caused rule lookup failures.

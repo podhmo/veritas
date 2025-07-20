@@ -403,12 +403,17 @@ func (v *Validator) validateNative(ctx context.Context, obj any, typ reflect.Typ
 			continue
 		}
 
+		var fieldInterface any
 		if fieldVal.Kind() == reflect.Ptr && fieldVal.IsNil() {
-			continue // Skip validation for nil pointer fields, or handle as a 'required' failure if needed.
+			// Use the type adapter to convert a nil Go pointer to a CEL null.
+			fieldInterface = types.DefaultTypeAdapter.NativeToValue(nil)
+		} else {
+			fieldInterface = fieldVal.Interface()
 		}
-		fieldInterface := fieldVal.Interface()
 		// For field-level rules, the `self` variable is the field's value.
 		// We use the simpler `fieldEnv` for this, as it expects `self` to be dynamic.
+		// By converting a nil Go pointer to `types.Null`, we allow `cel-go` to
+		// correctly evaluate it as `null` in expressions like `self != null`.
 		fieldVars := map[string]any{"self": fieldInterface}
 
 		for _, rule := range rules {
