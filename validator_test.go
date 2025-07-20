@@ -663,7 +663,18 @@ func TestValidator_Validate_Native(t *testing.T) {
 				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "", "self.Age >= 18"),
 				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Name", `self != ""`),
 				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "Email", `self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`),
+				NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "ID", `self != null`), // This should now be checked
 			),
+		},
+		{
+			name: "nil pointer field should fail required rule - native",
+			obj: &sources.MockUser{
+				Name:  "Gopher",
+				Email: "gopher@golang.org",
+				Age:   20,
+				ID:    nil, // Fails "self != null"
+			},
+			wantErr: NewValidationError("github.com/podhmo/veritas/testdata/sources.MockUser", "ID", `self != null`),
 		},
 	}
 
