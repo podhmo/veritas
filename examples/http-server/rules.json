@@ -1,5 +1,5 @@
 {
-  "http-server.User": {
+  "github.com/podhmo/veritas/examples/http-server.User": {
     "fieldRules": {
       "Name": [
         "size(self) > 0"

@@ -165,25 +165,28 @@ This document outlines the detailed, phased development plan for the "Veritas" v
     -   [x] Modify `NewValidatorFromJSONFile` to accept the new `WithTypes` option.
     -   [x] Update its internal logic to pass the types to `NewValidator`.
 
--   [ ] **8.3: Update `http-server` Example**
-    -   [ ] Refactor `examples/http-server/main.go` to use the new `WithTypes` option.
-    -   [ ] Remove the now-unnecessary `TypeAdapter` for the `User` struct in the example.
-    -   [ ] Verify the example works as expected.
+-   [x] **8.3: Update `http-server` Example**
+    -   [x] Refactored `examples/http-server/main.go` to use the new `WithTypes` option.
+    -   [x] Removed the `TypeAdapter` from the example.
+    -   [x] Verified the example works as expected.
+    -   **Note**: This required fixing `getTypeName` to use full package paths and ensuring the `fieldEnv` included the standard library.
 
 -   [ ] **8.4: Enhance `veritas-gen` for Type Generation**
     -   [ ] Modify the `veritas-gen` tool (`--format=go`) to generate a new function, e.g., `GetKnownTypes() []any`.
     -   [ ] This function will return a slice of instances of all the types for which validation rules were generated (e.g., `[]any{User{}, Post{}}`).
+    -   **Status**: Postponed. The implementation is complex due to cross-package type references.
 
 -   [ ] **8.5: Update `gencode` Example**
     -   [ ] Refactor `examples/gencode/main.go` to call the new `GetKnownTypes()` function from the generated code.
-    -   [ ] Pass the result to `veritas.NewValidator(veritas.WithTypes(generated.GetKnownTypes()...))`.
-    -   [ ] Verify the example works as expected.
+    -   **Status**: Postponed.
 
--   [ ] **8.6: Deprecate and Remove `TypeAdapter`**
-    -   [ ] Remove the `TypeAdapterFunc`, `TypeAdapterTarget`, and the `adapters` map from the `Validator` struct.
-    -   [ ] Remove the `WithTypeAdapters` option.
-    -   [ ] This is a breaking change and should be clearly communicated.
+-   [ ] **8.6: Deprecate and Remove `TypeAdapter` (Postponed)**
+    -   **Note**: The full removal of the `TypeAdapter` is postponed due to complexities with `cel-go`'s native type support for generics and nil pointers. The `TypeAdapter` will remain as a fallback mechanism. The `WithTypes` option is now the recommended path for simple, non-generic structs. A more detailed plan for full removal is needed. See `docs/remove-adapter-plan.md` for a summary of the challenges.
 
 -   [ ] **8.7: Update Documentation**
     -   [ ] Update `README.md`, `docs/knowledge.md` and other relevant documents to reflect the new, simpler API.
-    -   [ ] Remove all mentions of the `TypeAdapter` pattern.
+    -   [ ] Remove all mentions of the `TypeAdapter` pattern where `WithTypes` is the preferred alternative.
+
+-   [ ] **8.8: Fully Support Native Generics and Pointers (New Task)**
+    -   [ ] Investigate and implement robust support for generic types within the `WithTypes` validation path.
+    -   [ ] Ensure `cel-go` correctly handles `nil` pointer fields without causing `unsupported conversion` errors, potentially by contributing upstream or finding a reliable workaround.
