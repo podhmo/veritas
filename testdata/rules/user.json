@@ -83,7 +83,7 @@
     ],
     "fieldRules": {
       "Email": [
-        "self != \"\" \u0026\u0026 self.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
+        "self != \"\" && self.matches('^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$')"
       ],
       "ID": [
         "self != null"
