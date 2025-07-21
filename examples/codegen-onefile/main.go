@@ -17,8 +17,6 @@ type User struct {
 
 func main() {
 	ctx := context.Background()
-	// TODO: uncomment after running go generate
-	// validator, err := veritas.NewValidator(
 	validator, err := veritas.NewValidator(
 		veritas.WithTypes(GetKnownTypes()...),
 	)
