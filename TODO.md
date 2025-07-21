@@ -170,7 +170,7 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 - [x] Create the `examples/codegen-onefile` directory and initial `main.go` and `main_test.go` files.
 - [x] Add unit tests for the injection logic.
 - [x] Add integration tests using the `examples/codegen-onefile` example.
-- [ ] Update `README.md` and any other relevant documentation to reflect the new feature.
+- [x] Update `README.md` and any other relevant documentation to reflect the new feature.
 
 ## Phase 10: Chicken and Egg Problem Resolution
 
