@@ -18,9 +18,9 @@ Veritas is a dynamic, type-safe, and extensible validation library for Go, power
 
 ## Getting Started
 
-### Option 1: Using Go Generate (Recommended)
+### Option 1: Using Go Generate (Separate File)
 
-The recommended approach is to use Go code generation for a type-safe, high-performance validation experience.
+This is the recommended approach for most projects. It generates a separate `.go` file containing your validation logic, keeping it isolated from your main source code.
 
 1.  **Annotate your structs:**
 
@@ -94,7 +94,61 @@ The recommended approach is to use Go code generation for a type-safe, high-perf
     }
     ```
 
-### Option 2: Using JSON Rules
+### Option 2: Single-File Injection
+
+For projects where you want to avoid extra generated files, Veritas can inject the validation setup directly into one of your existing Go files. It looks for a function named `setupValidation` and, if it finds it, replaces its body with the rule-loading logic. If the function doesn't exist, it will be added to the end of the file.
+
+1.  **Annotate your structs and add a `go:generate` directive:**
+
+    Use the `-inject` flag in your `go:generate` comment to specify the file where the code should be injected.
+
+    ```go
+    // file: main.go
+    package main
+
+    //go:generate go run github.com/podhmo/veritas/cmd/veritas -gen-type=User -inject=main.go
+
+    // @cel: self.Password == self.PasswordConfirm
+    type User struct {
+	Name            string `validate:"nonzero,cel:self.size() < 50"`
+	Email           string `validate:"nonzero,email"`
+	Password        string `validate:"nonzero,cel:self.size() >= 10"`
+	PasswordConfirm string `validate:"nonzero"`
+    }
+
+    // setupValidation is the function where validation rules will be injected.
+    // It is called by an automatically generated init() function.
+    func setupValidation(v *veritas.Validator) {
+	// The body of this function will be replaced by the generator.
+    }
+    ```
+
+2.  **Generate validation code:**
+
+    Run `go generate` as usual.
+
+    ```bash
+    go generate ./...
+    ```
+    Instead of creating a new file, `veritas` will modify `main.go` to include the validation setup. An `init()` function that calls `setupValidation()` will also be added if it doesn't exist.
+
+3.  **Use the validator in your application:**
+
+    The setup is the same as the standard code generation method. The rules are registered automatically.
+
+    ```go
+    // main.go (continued)
+    func main() {
+        validator, err := veritas.NewValidator()
+        if err != nil {
+            log.Fatalf("Failed to create validator: %v", err)
+        }
+
+        // ... validation logic ...
+    }
+    ```
+
+### Option 3: Using JSON Rules
 
 For more dynamic environments, you can load validation rules from a JSON file.
 
