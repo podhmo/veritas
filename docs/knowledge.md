@@ -47,3 +47,28 @@ When undertaking complex or high-risk tasks, such as major refactoring or implem
 
 **Rationale**:
 This practice ensures that the "why" behind a decision is never lost. If a developer (including our AI agent, Jules) has to revisit the task later, the document provides a clear record of what was tried and why certain paths were abandoned. This prevents repeating failed experiments and provides a solid foundation for future efforts. For example, the detailed log of attempts to remove the `TypeAdapter` pattern in `docs/remove-adapter-plan.md` is a critical asset for future development.
+
+## 3. Resolving the "Chicken and Egg" Problem in Code Generation
+
+### The Goal: Robust `go:generate` Workflow
+
+A key feature of `veritas` is its ability to automatically generate validation logic from source code using a `//go:generate` directive. A seamless experience requires this process to be robust, even when the code being analyzed is incomplete because it depends on the code that is about to be generated.
+
+### The Problem: `undefined: GetKnownTypes`
+
+This "chicken and egg" problem manifested when running `go generate` in a file that called `GetKnownTypes()`. The `veritas` generator would analyze the source code, find a call to a function (`GetKnownTypes`) that did not yet exist, and fail with a type-checking error (`undefined: GetKnownTypes`). This halted the entire generation process, preventing the very file that would define the function from being created.
+
+### Investigation and Abandoned Solutions
+
+1.  **`go/packages` Overlay**: The initial thought was to use the `overlay` feature of the `go/packages` API. This feature allows providing virtual, in-memory versions of files to the loader. The idea was to create a fake, empty `GetKnownTypes` function in an overlay to satisfy the type checker during the initial analysis.
+2.  **The Roadblock**: This approach was quickly abandoned because the higher-level analysis frameworks being used—`golang.org/x/tools/go/analysis` and its runners like `singlegenerator` and `multichecker`—do not expose a configuration option to pass an `overlay` down to the underlying `go/packages` loader. Modifying these frameworks was deemed out of scope.
+
+### The Solution: Targeted Error Suppression
+
+The adopted solution is a pragmatic workaround that directly addresses the symptom:
+
+-   **Error Inspection**: The generator's core analysis function was modified to inspect the error returned by the package loader.
+-   **Conditional Suppression**: If the error message contains the string `"undefined:"`, the generator assumes it has encountered the chicken-and-egg problem. It logs a warning message to inform the user but otherwise suppresses the error and continues execution. In this state, no validation rules or types are discovered, which is acceptable because the primary goal is to allow the generator to proceed to the code-writing phase.
+-   **Successful Second Pass**: On the *next* run of `go generate`, the file created in the previous run (containing `GetKnownTypes`) now exists, the type checker is satisfied, and the generator can successfully parse the rules and regenerate the file with the correct content.
+
+This solution, while not as elegant as an overlay, is effective, self-contained within the `veritas` codebase, and provides a robust user experience for the `go:generate` workflow.
