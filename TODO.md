@@ -172,7 +172,14 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 - [x] Add integration tests using the `examples/codegen-onefile` example.
 - [ ] Update `README.md` and any other relevant documentation to reflect the new feature.
 
-## Phase 10: Parser Enhancement
+## Phase 10: Chicken and Egg Problem Resolution
+
+**Goal**: Resolve the "chicken and egg" problem that occurs during code generation with `-inject`.
+
+- [ ] **10.1: Resolve `undefined: GetKnownTypes` error**
+  - Investigate and implement a solution to prevent the `go generate` process from failing due to the `GetKnownTypes` function not yet existing when the analyzer runs.
+
+## Phase 11: Parser Enhancement
 
 **Goal**: Improve the capabilities of the `validate` tag parser.
 
