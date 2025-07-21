@@ -1,0 +1,30 @@
+package b
+
+import (
+	"b"
+
+	"github.com/podhmo/veritas"
+)
+
+func setupValidation() {
+	veritas.Register("b.Person", veritas.ValidationRuleSet{
+		FieldRules: map[string][]string{
+			"Age": {
+				"`self != 0`",
+			},
+			"Name": {
+				"`self != \"\"`",
+			},
+		},
+	})
+}
+
+// GetKnownTypes returns a list of all types that have validation rules.
+func GetKnownTypes() []any {
+	return []any{
+		b.Person{},
+	}
+}
+func init() {
+	setupValidation()
+}

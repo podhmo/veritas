@@ -176,8 +176,8 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 
 **Goal**: Resolve the "chicken and egg" problem that occurs during code generation with `-inject`.
 
-- [ ] **10.1: Resolve `undefined: GetKnownTypes` error**
-  - Investigate and implement a solution to prevent the `go generate` process from failing due to the `GetKnownTypes` function not yet existing when the analyzer runs.
+- [x] **10.1: Resolve `undefined: GetKnownTypes` error**
+  - Implemented a workaround to ignore "undefined: GetKnownTypes" errors during the initial parsing phase of code generation. This allows the process to complete successfully even when the generated functions don't exist yet. A warning is logged to indicate that the error was ignored.
 
 ## Phase 11: Parser Enhancement
 
