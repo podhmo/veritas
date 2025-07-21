@@ -163,19 +163,23 @@ This document outlines the detailed, phased development plan for the "Veritas" v
 **Goal**: Add the ability to inject or update a `setupValidation` function in a single Go file. (See `docs/onefile-injection.md` for details)
 
 - [x] Implement the `-inject` flag in `cmd/veritas`.
-- [p] Implement the AST parsing logic to find `setupValidation`.
-  - **Note**: Current implementation finds the function, but the replacement/append logic needs refinement.
-- [p] Implement the function body replacement logic.
-  - **Note**: This is partially implemented. The current approach of rewriting the entire file via `format.Node` can unintentionally alter formatting and remove comments. The logic should be improved to only replace the function body's text content.
-- [p] Implement the function appending logic for when `setupValidation` is not found.
-  - **Note**: Same as above. Appending should be done as a textual operation if possible to preserve the original source's integrity.
+- [x] Implement the AST parsing logic to find `setupValidation`.
+- [x] Implement the function body replacement logic.
+- [x] Implement the function appending logic for when `setupValidation` is not found.
 - [x] Update standard code generation to include an `init()` function that calls `setupValidation()`.
 - [x] Create the `examples/codegen-onefile` directory and initial `main.go` and `main_test.go` files.
-- [ ] Add unit tests for the injection logic.
-- [ ] Add integration tests using the `examples/codegen-onefile` example.
+- [x] Add unit tests for the injection logic.
+- [x] Add integration tests using the `examples/codegen-onefile` example.
 - [ ] Update `README.md` and any other relevant documentation to reflect the new feature.
 
-## Phase 10: Parser Enhancement
+## Phase 10: Chicken and Egg Problem Resolution
+
+**Goal**: Resolve the "chicken and egg" problem that occurs during code generation with `-inject`.
+
+- [ ] **10.1: Resolve `undefined: GetKnownTypes` error**
+  - Investigate and implement a solution to prevent the `go generate` process from failing due to the `GetKnownTypes` function not yet existing when the analyzer runs.
+
+## Phase 11: Parser Enhancement
 
 **Goal**: Improve the capabilities of the `validate` tag parser.
 

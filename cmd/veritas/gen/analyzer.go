@@ -91,7 +91,7 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	}
 	// Use a map to ensure package paths are unique
 	for _, t := range knownTypes {
-		if t.PackagePath != "" {
+		if t.PackagePath != "" && t.PackageName != pkgName {
 			imports[t.PackageName] = t.PackagePath
 		}
 	}
@@ -150,19 +150,27 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	fmt.Fprintf(&buf, "}\n\n")
 
 	// 4. Print init function
-	fmt.Fprintf(&buf, "func init() {\n")
-	fmt.Fprintf(&buf, "\tsetupValidation()\n")
-	fmt.Fprintf(&buf, "}\n\n")
 
 	// 5. Print GetKnownTypes function
 	fmt.Fprintf(&buf, "// GetKnownTypes returns a list of all types that have validation rules.\n")
 	fmt.Fprintf(&buf, "func GetKnownTypes() []any {\n")
 	fmt.Fprintf(&buf, "\treturn []any{\n")
 	for _, t := range knownTypes {
-		fmt.Fprintf(&buf, "\t\t%s.%s{},\n", t.PackageName, t.TypeName)
+		if t.PackageName == pkgName {
+			fmt.Fprintf(&buf, "\t\t%s{},\n", t.TypeName)
+		} else {
+			fmt.Fprintf(&buf, "\t\t%s.%s{},\n", t.PackageName, t.TypeName)
+		}
 	}
 	fmt.Fprintf(&buf, "\t}\n")
 	fmt.Fprintf(&buf, "}\n")
+
+	// 4. Print init function (only when not injecting)
+	if flagInject == "" {
+		fmt.Fprintf(&buf, "func init() {\n")
+		fmt.Fprintf(&buf, "\tsetupValidation()\n")
+		fmt.Fprintf(&buf, "}\n\n")
+	}
 
 	// 5. Format and write the output
 	source := buf.Bytes()
