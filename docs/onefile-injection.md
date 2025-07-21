@@ -94,18 +94,3 @@ Directly manipulating the AST to replace or append function bodies proved to be 
 
 A more robust approach would require careful, low-level manipulation of the source text, which is significantly more complex than intended for this feature.
 
-### 7.3. Workaround: `-o` Flag and Separate File Generation
-
-As a workaround for the package resolution issues and to avoid the complexity of AST manipulation, an alternative approach using an `-o` flag was explored. This flag directs the code generator to output the validation rules to a separate file (e.g., `validation.go`) within the same package.
-
-This approach has several advantages:
-
-*   **Simplicity:** It avoids complex AST manipulation.
-*   **Robustness:** It doesn't risk corrupting the user's original source file.
-*   **Clarity:** It separates generated code from user-written code.
-
-While this approach deviates from the original "one-file injection" goal, it provides a more stable and reliable solution for the problem of generating validation code for a single-package application. The current implementation of `examples/codegen-onefile` has been updated to use this `-o` flag method.
-
-### 7.4. Future of `-inject`
-
-Given the challenges, the `-inject` feature is currently on hold. The recommended approach for single-package validation is to use the `-o` flag to generate a separate validation file. The implementation of `-inject` may be revisited in the future if a more robust method for AST manipulation is identified.
