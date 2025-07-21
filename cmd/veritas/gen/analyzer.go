@@ -150,9 +150,6 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	fmt.Fprintf(&buf, "}\n\n")
 
 	// 4. Print init function
-	fmt.Fprintf(&buf, "func init() {\n")
-	fmt.Fprintf(&buf, "\tsetupValidation()\n")
-	fmt.Fprintf(&buf, "}\n\n")
 
 	// 5. Print GetKnownTypes function
 	fmt.Fprintf(&buf, "// GetKnownTypes returns a list of all types that have validation rules.\n")
@@ -167,6 +164,13 @@ func (g *GoCodeGenerator) Generate(pkgName string, ruleSets map[string]veritas.V
 	}
 	fmt.Fprintf(&buf, "\t}\n")
 	fmt.Fprintf(&buf, "}\n")
+
+	// 4. Print init function (only when not injecting)
+	if flagInject == "" {
+		fmt.Fprintf(&buf, "func init() {\n")
+		fmt.Fprintf(&buf, "\tsetupValidation()\n")
+		fmt.Fprintf(&buf, "}\n\n")
+	}
 
 	// 5. Format and write the output
 	source := buf.Bytes()

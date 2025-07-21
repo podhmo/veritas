@@ -20,13 +20,12 @@ func setupValidation() {
 	})
 }
 
-func init() {
-	setupValidation()
-}
-
 // GetKnownTypes returns a list of all types that have validation rules.
 func GetKnownTypes() []any {
 	return []any{
 		User{},
 	}
+}
+func init() {
+	setupValidation()
 }

@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run github.com/podhmo/veritas/cmd/veritas -o=validation.go -pkg=main .
+//go:generate go run github.com/podhmo/veritas/cmd/veritas -inject=main.go .
 
 import (
 	"context"
@@ -48,4 +48,28 @@ func main() {
 	} else {
 		fmt.Printf("Validation failed as expected for invalid user (age): %v\n", err)
 	}
+}
+
+func setupValidation() {
+	veritas.Register("github.com/podhmo/veritas/examples/codegen-onefile.User", veritas.ValidationRuleSet{
+		FieldRules: map[string][]string{
+			"Age": {
+				`self != 0`,
+			},
+			"Name": {
+				`self != ""`,
+			},
+		},
+	})
+}
+
+// GetKnownTypes returns a list of all types that have validation rules.
+func GetKnownTypes() []any {
+	return []any{
+		User{},
+	}
+}
+
+func init() {
+	setupValidation()
 }

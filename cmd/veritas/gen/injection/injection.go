@@ -10,10 +10,12 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/podhmo/veritas"
 	parser_ "github.com/podhmo/veritas/cmd/veritas/parser"
 	"golang.org/x/tools/go/ast/astutil"
+	"golang.org/x/tools/imports"
 )
 
 // Inject injects the validation setup function into the target file.
@@ -24,127 +26,163 @@ func Inject(
 	knownTypes []parser_.TypeInfo,
 ) error {
 	fset := token.NewFileSet()
-	// NOTE: The third argument is src, and it can be nil if the file is specified by filename.
 	node, err := parser.ParseFile(fset, targetFile, nil, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("failed to parse file %s: %w", targetFile, err)
 	}
 
-	// Generate the body of the setupValidation function
-	var setupBuf bytes.Buffer
-	if err := generateSetupValidationBody(&setupBuf, ruleSets, knownTypes); err != nil {
-		return fmt.Errorf("failed to generate function body for setupValidation: %w", err)
+	// Generate the setupValidation and GetKnownTypes functions
+	var setupValidationBuf bytes.Buffer
+	if err := generateSetupValidation(&setupValidationBuf, ruleSets); err != nil {
+		return fmt.Errorf("failed to generate setupValidation: %w", err)
 	}
-	setupBody, err := parseFunctionBody(fset, setupBuf.String())
-	if err != nil {
-		return fmt.Errorf("failed to parse generated body for setupValidation: %w", err)
-	}
-	upsertFunc(node, "setupValidation", setupBody)
 
-	// Generate GetKnownTypes function
 	var getKnownTypesBuf bytes.Buffer
 	if err := generateGetKnownTypes(&getKnownTypesBuf, pkgName, knownTypes); err != nil {
-		return fmt.Errorf("failed to generate function body for GetKnownTypes: %w", err)
+		return fmt.Errorf("failed to generate GetKnownTypes: %w", err)
 	}
-	getKnownTypesDecl, err := parseFuncDecl(fset, getKnownTypesBuf.String())
-	if err != nil {
-		return fmt.Errorf("failed to parse generated body for GetKnownTypes: %w", err)
-	}
-	upsertFuncDecl(node, "GetKnownTypes", getKnownTypesDecl)
 
-	// Write the modified AST back to the file
-	var outBuf bytes.Buffer
-	if err := format.Node(&outBuf, fset, node); err != nil {
-		return fmt.Errorf("failed to format output: %w", err)
+	// Replace or append the functions
+	originalContent, err := os.ReadFile(targetFile)
+	if err != nil {
+		return fmt.Errorf("failed to read original file %s: %w", targetFile, err)
 	}
-	if err := os.WriteFile(targetFile, outBuf.Bytes(), 0644); err != nil {
-		return fmt.Errorf("failed to write to file %s: %w", targetFile, err)
+
+	newContent, err := replaceOrAppendFunction(
+		fset,
+		node,
+		string(originalContent),
+		"setupValidation",
+		setupValidationBuf.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to replace or append setupValidation: %w", err)
+	}
+
+	// Re-parse the AST to get the correct node for the next replacement
+	fset = token.NewFileSet()
+	node, err = parser.ParseFile(fset, targetFile, newContent, parser.ParseComments)
+	if err != nil {
+		// If parsing fails, it might be because the content is now just a string.
+		// Let's try parsing the string content directly.
+		node, err = parser.ParseFile(fset, "", newContent, parser.ParseComments)
+		if err != nil {
+			return fmt.Errorf("failed to re-parse file after setupValidation injection: %w", err)
+		}
+	}
+
+	newContent, err = replaceOrAppendFunction(
+		fset,
+		node,
+		newContent,
+		"GetKnownTypes",
+		getKnownTypesBuf.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to replace or append GetKnownTypes: %w", err)
+	}
+
+	// Generate and inject init function
+	var initBuf bytes.Buffer
+	if err := generateInit(&initBuf); err != nil {
+		return fmt.Errorf("failed to generate init: %w", err)
+	}
+
+	// Re-parse the AST to get the correct node for the next replacement
+	fset = token.NewFileSet()
+	node, err = parser.ParseFile(fset, "", newContent, parser.ParseComments)
+	if err != nil {
+		return fmt.Errorf("failed to re-parse file after GetKnownTypes injection: %w", err)
+	}
+
+	newContent, err = replaceOrAppendFunction(
+		fset,
+		node,
+		newContent,
+		"init",
+		initBuf.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to replace or append init: %w", err)
+	}
+
+	// Use imports.Process to format and add/remove imports
+	formattedContent, err := imports.Process(targetFile, []byte(newContent), nil)
+	if err != nil {
+		return fmt.Errorf("processing (goimports) generated code for %s: %w\nOriginal newContent was:\n%s", targetFile, err, newContent)
+	}
+
+	if err := os.WriteFile(targetFile, formattedContent, 0644); err != nil {
+		return fmt.Errorf("writing modified content to %s: %w", targetFile, err)
 	}
 
 	return nil
 }
 
-func parseFunctionBody(fset *token.FileSet, body string) ([]ast.Stmt, error) {
-	bodySrc := fmt.Sprintf("package main\nfunc temp() {\n%s\n}", body)
-	bodyFile, err := parser.ParseFile(fset, "", bodySrc, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse generated body: %w\n---\n%s", err, body)
-	}
-	return bodyFile.Decls[0].(*ast.FuncDecl).Body.List, nil
-}
-
-func upsertFunc(node *ast.File, name string, body []ast.Stmt) {
-	var found bool
+func replaceOrAppendFunction(
+	fset *token.FileSet,
+	node *ast.File,
+	originalContent string,
+	funcName string,
+	newFuncContent string,
+) (string, error) {
+	var funcNode *ast.FuncDecl
 	astutil.Apply(node, func(cursor *astutil.Cursor) bool {
-		fn, ok := cursor.Node().(*ast.FuncDecl)
-		if !ok || fn.Name.Name != name {
-			return true
+		if fn, ok := cursor.Node().(*ast.FuncDecl); ok && fn.Name.Name == funcName {
+			funcNode = fn
+			return false
 		}
-		found = true
-		fn.Body.List = body
-		return false // Stop searching
+		return true
 	}, nil)
 
-	if !found {
-		// Create the function declaration
-		fn := &ast.FuncDecl{
-			Name: ast.NewIdent(name),
-			Type: &ast.FuncType{
-				Params:  &ast.FieldList{},
-				Results: nil,
-			},
-			Body: &ast.BlockStmt{
-				List: body,
-			},
+	if funcNode == nil {
+		// Append new function to the end of the file.
+		var builder strings.Builder
+		builder.WriteString(originalContent)
+		if len(originalContent) > 0 && !strings.HasSuffix(originalContent, "\n") {
+			builder.WriteString("\n")
 		}
-		node.Decls = append(node.Decls, fn)
+		builder.WriteString("\n") // Add an extra newline for separation
+		builder.WriteString(newFuncContent)
+		return builder.String(), nil
 	}
-}
 
-func parseFuncDecl(fset *token.FileSet, src string) (*ast.FuncDecl, error) {
-	fileSrc := fmt.Sprintf("package main\n%s", src)
-	file, err := parser.ParseFile(fset, "", fileSrc, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse generated decl: %w\n---\n%s", err, src)
+	// Replace existing function.
+	originalLines := strings.Split(originalContent, "\n")
+
+	var startNode ast.Node = funcNode
+	if funcNode.Doc != nil && len(funcNode.Doc.List) > 0 {
+		startNode = funcNode.Doc
 	}
-	return file.Decls[0].(*ast.FuncDecl), nil
-}
+	startLine := fset.Position(startNode.Pos()).Line
+	endLine := fset.Position(funcNode.End()).Line
 
-func upsertFuncDecl(node *ast.File, name string, decl *ast.FuncDecl) {
-	var found bool
-	astutil.Apply(node, func(cursor *astutil.Cursor) bool {
-		fn, ok := cursor.Node().(*ast.FuncDecl)
-		if !ok || fn.Name.Name != name {
-			return true
-		}
-		found = true
-		*fn = *decl
-		return false // Stop searching
-	}, nil)
-
-	if !found {
-		node.Decls = append(node.Decls, decl)
+	var builder strings.Builder
+	for i := 0; i < startLine-1; i++ {
+		builder.WriteString(originalLines[i])
+		builder.WriteString("\n")
 	}
-}
 
-func generateGetKnownTypes(w io.Writer, pkgName string, knownTypes []parser_.TypeInfo) error {
-	fmt.Fprintf(w, "// GetKnownTypes returns a list of all types that have validation rules.\n")
-	fmt.Fprintf(w, "func GetKnownTypes() []any {\n")
-	fmt.Fprintf(w, "return []any{\n")
-	for _, t := range knownTypes {
-		if t.PackageName == pkgName {
-			fmt.Fprintf(w, "%s{},\n", t.TypeName)
-		} else {
-			fmt.Fprintf(w, "%s.%s{},\n", t.PackageName, t.TypeName)
+	builder.WriteString(newFuncContent)
+	if !strings.HasSuffix(newFuncContent, "\n") {
+		builder.WriteString("\n")
+	}
+
+	if endLine < len(originalLines) {
+		for i := endLine; i < len(originalLines); i++ {
+			builder.WriteString(originalLines[i])
+			if i < len(originalLines)-1 {
+				builder.WriteString("\n")
+			}
 		}
 	}
-	fmt.Fprintf(w, "}\n")
-	fmt.Fprintf(w, "}\n")
-	return nil
+
+	return builder.String(), nil
 }
 
-func generateSetupValidationBody(w io.Writer, ruleSets map[string]veritas.ValidationRuleSet, knownTypes []parser_.TypeInfo) error {
-	// Sort keys for deterministic output
+func generateSetupValidation(w io.Writer, ruleSets map[string]veritas.ValidationRuleSet) error {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "func setupValidation() {\n")
 	keys := make([]string, 0, len(ruleSets))
 	for k := range ruleSets {
 		keys = append(keys, k)
@@ -153,31 +191,75 @@ func generateSetupValidationBody(w io.Writer, ruleSets map[string]veritas.Valida
 
 	for _, key := range keys {
 		ruleSet := ruleSets[key]
-		fmt.Fprintf(w, "veritas.Register(\"%s\", veritas.ValidationRuleSet{\n", key)
+		fmt.Fprintf(&buf, "\tveritas.Register(\"%s\", veritas.ValidationRuleSet{\n", key)
 		if len(ruleSet.TypeRules) > 0 {
-			fmt.Fprintf(w, "TypeRules: []string{\n")
+			fmt.Fprintf(&buf, "\t\tTypeRules: []string{\n")
 			for _, rule := range ruleSet.TypeRules {
-				fmt.Fprintf(w, "`%s`,\n", rule)
+				fmt.Fprintf(&buf, "\t\t\t`%s`,\n", rule)
 			}
-			fmt.Fprintf(w, "},\n")
+			fmt.Fprintf(&buf, "\t\t},\n")
 		}
 		if len(ruleSet.FieldRules) > 0 {
-			fmt.Fprintf(w, "FieldRules: map[string][]string{\n")
+			fmt.Fprintf(&buf, "\t\tFieldRules: map[string][]string{\n")
 			fieldKeys := make([]string, 0, len(ruleSet.FieldRules))
 			for fk := range ruleSet.FieldRules {
 				fieldKeys = append(fieldKeys, fk)
 			}
 			sort.Strings(fieldKeys)
 			for _, fk := range fieldKeys {
-				fmt.Fprintf(w, "\"%s\": {\n", fk)
+				fmt.Fprintf(&buf, "\t\t\t\"%s\": {\n", fk)
 				for _, rule := range ruleSet.FieldRules[fk] {
-					fmt.Fprintf(w, "`%s`,\n", rule)
+					fmt.Fprintf(&buf, "\t\t\t\t`%s`,\n", rule)
 				}
-				fmt.Fprintf(w, "},\n")
+				fmt.Fprintf(&buf, "\t\t\t},\n")
 			}
-			fmt.Fprintf(w, "},\n")
+			fmt.Fprintf(&buf, "\t\t},\n")
 		}
-		fmt.Fprintf(w, "})\n")
+		fmt.Fprintf(&buf, "\t})\n")
 	}
-	return nil
+	fmt.Fprintf(&buf, "}\n")
+
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("failed to format setupValidation: %w\n---\n%s", err, buf.String())
+	}
+	_, err = w.Write(formatted)
+	return err
+}
+
+func generateInit(w io.Writer) error {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "func init() {\n")
+	fmt.Fprintf(&buf, "\tsetupValidation()\n")
+	fmt.Fprintf(&buf, "}\n")
+
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("failed to format init: %w\n---\n%s", err, buf.String())
+	}
+	_, err = w.Write(formatted)
+	return err
+}
+
+func generateGetKnownTypes(w io.Writer, pkgName string, knownTypes []parser_.TypeInfo) error {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "// GetKnownTypes returns a list of all types that have validation rules.\n")
+	fmt.Fprintf(&buf, "func GetKnownTypes() []any {\n")
+	fmt.Fprintf(&buf, "\treturn []any{\n")
+	for _, t := range knownTypes {
+		if t.PackageName == pkgName {
+			fmt.Fprintf(&buf, "\t\t%s{},\n", t.TypeName)
+		} else {
+			fmt.Fprintf(&buf, "\t\t%s.%s{},\n", t.PackageName, t.TypeName)
+		}
+	}
+	fmt.Fprintf(&buf, "\t}\n")
+	fmt.Fprintf(&buf, "}\n")
+
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("failed to format GetKnownTypes: %w\n---\n%s", err, buf.String())
+	}
+	_, err = w.Write(formatted)
+	return err
 }

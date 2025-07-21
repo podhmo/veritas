@@ -78,19 +78,13 @@ A `TODO.md` file will be created with the following tasks:
 *   Add unit and integration tests.
 *   Update documentation.
 
-## 7. Implementation Challenges and Workarounds
+## 7. Implementation Details
 
-During the implementation of the `-inject` feature, several challenges were encountered.
+The final implementation uses a hybrid approach that combines AST analysis with text-based replacement to achieve a robust and format-preserving injection mechanism.
 
-### 7.1. Package Resolution Issues with `go generate`
+1.  **AST Parsing:** The target file is parsed using `go/parser` to locate the `setupValidation`, `GetKnownTypes`, and `init` functions.
+2.  **Code Generation:** The bodies of these functions are generated as strings.
+3.  **Text-based Replacement:** The original source file is read, and the lines corresponding to the target functions (identified via their positions in the `token.FileSet`) are replaced with the newly generated code. If a function does not exist, it is appended to the end of the file.
+4.  **Goimports:** After the text-based replacement, `golang.org/x/tools/imports.Process` is used to format the resulting code and automatically manage imports. This ensures that the final output is clean, correctly formatted, and has the necessary imports.
 
-When running `go generate` on `examples/codegen-onefile/main.go`, the `veritas` command, executed via `go run`, failed to correctly resolve the types within the `main` package of the example. This resulted in an `undefined: GetKnownTypes` error, creating a chicken-and-egg problem: the code generator needed to run to create the function, but the presence of the function call caused the generator's analysis phase to fail.
-
-This issue stems from the fact that the `go/analysis` framework, which `veritas-gen` is built upon, performs a full type-checking pass before running the generator.
-
-### 7.2. AST Manipulation Complexity
-
-Directly manipulating the AST to replace or append function bodies proved to be complex. Using `go/printer` to write the modified AST back to the file often resulted in unintended formatting changes and the removal of comments, making it a brittle solution.
-
-A more robust approach would require careful, low-level manipulation of the source text, which is significantly more complex than intended for this feature.
-
+This approach successfully avoids the pitfalls of re-printing the entire AST (which can lead to undesirable formatting changes) while still leveraging the power of the AST for accurate function location.
