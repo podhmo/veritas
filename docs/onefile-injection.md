@@ -77,3 +77,35 @@ A `TODO.md` file will be created with the following tasks:
 *   Create the `examples/codegen-onefile` directory and files.
 *   Add unit and integration tests.
 *   Update documentation.
+
+## 7. Implementation Challenges and Workarounds
+
+During the implementation of the `-inject` feature, several challenges were encountered.
+
+### 7.1. Package Resolution Issues with `go generate`
+
+When running `go generate` on `examples/codegen-onefile/main.go`, the `veritas` command, executed via `go run`, failed to correctly resolve the types within the `main` package of the example. This resulted in an `undefined: GetKnownTypes` error, creating a chicken-and-egg problem: the code generator needed to run to create the function, but the presence of the function call caused the generator's analysis phase to fail.
+
+This issue stems from the fact that the `go/analysis` framework, which `veritas-gen` is built upon, performs a full type-checking pass before running the generator.
+
+### 7.2. AST Manipulation Complexity
+
+Directly manipulating the AST to replace or append function bodies proved to be complex. Using `go/printer` to write the modified AST back to the file often resulted in unintended formatting changes and the removal of comments, making it a brittle solution.
+
+A more robust approach would require careful, low-level manipulation of the source text, which is significantly more complex than intended for this feature.
+
+### 7.3. Workaround: `-o` Flag and Separate File Generation
+
+As a workaround for the package resolution issues and to avoid the complexity of AST manipulation, an alternative approach using an `-o` flag was explored. This flag directs the code generator to output the validation rules to a separate file (e.g., `validation.go`) within the same package.
+
+This approach has several advantages:
+
+*   **Simplicity:** It avoids complex AST manipulation.
+*   **Robustness:** It doesn't risk corrupting the user's original source file.
+*   **Clarity:** It separates generated code from user-written code.
+
+While this approach deviates from the original "one-file injection" goal, it provides a more stable and reliable solution for the problem of generating validation code for a single-package application. The current implementation of `examples/codegen-onefile` has been updated to use this `-o` flag method.
+
+### 7.4. Future of `-inject`
+
+Given the challenges, the `-inject` feature is currently on hold. The recommended approach for single-package validation is to use the `-o` flag to generate a separate validation file. The implementation of `-inject` may be revisited in the future if a more robust method for AST manipulation is identified.

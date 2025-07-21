@@ -31,45 +31,26 @@ func Inject(
 	}
 
 	// Generate the body of the setupValidation function
-	var buf bytes.Buffer
-	if err := generateSetupValidationBody(&buf, ruleSets, knownTypes); err != nil {
-		return fmt.Errorf("failed to generate function body: %w", err)
+	var setupBuf bytes.Buffer
+	if err := generateSetupValidationBody(&setupBuf, ruleSets, knownTypes); err != nil {
+		return fmt.Errorf("failed to generate function body for setupValidation: %w", err)
 	}
-
-	// Parse the generated body into a list of statements
-	bodySrc := fmt.Sprintf("package main\nfunc temp() {\n%s\n}", buf.String())
-	bodyFile, err := parser.ParseFile(fset, "", bodySrc, 0)
+	setupBody, err := parseFunctionBody(fset, setupBuf.String())
 	if err != nil {
-		return fmt.Errorf("failed to parse generated body: %w\n---\n%s", err, buf.String())
+		return fmt.Errorf("failed to parse generated body for setupValidation: %w", err)
 	}
-	newStmts := bodyFile.Decls[0].(*ast.FuncDecl).Body.List
+	upsertFunc(node, "setupValidation", setupBody)
 
-	// Find and replace the function, or append it
-	var found bool
-	astutil.Apply(node, func(cursor *astutil.Cursor) bool {
-		fn, ok := cursor.Node().(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "setupValidation" {
-			return true
-		}
-		found = true
-		fn.Body.List = newStmts
-		return false // Stop searching
-	}, nil)
-
-	if !found {
-		// Create the function declaration
-		fn := &ast.FuncDecl{
-			Name: ast.NewIdent("setupValidation"),
-			Type: &ast.FuncType{
-				Params:  &ast.FieldList{},
-				Results: nil,
-			},
-			Body: &ast.BlockStmt{
-				List: newStmts,
-			},
-		}
-		node.Decls = append(node.Decls, fn)
+	// Generate GetKnownTypes function
+	var getKnownTypesBuf bytes.Buffer
+	if err := generateGetKnownTypes(&getKnownTypesBuf, pkgName, knownTypes); err != nil {
+		return fmt.Errorf("failed to generate function body for GetKnownTypes: %w", err)
 	}
+	getKnownTypesDecl, err := parseFuncDecl(fset, getKnownTypesBuf.String())
+	if err != nil {
+		return fmt.Errorf("failed to parse generated body for GetKnownTypes: %w", err)
+	}
+	upsertFuncDecl(node, "GetKnownTypes", getKnownTypesDecl)
 
 	// Write the modified AST back to the file
 	var outBuf bytes.Buffer
@@ -80,6 +61,85 @@ func Inject(
 		return fmt.Errorf("failed to write to file %s: %w", targetFile, err)
 	}
 
+	return nil
+}
+
+func parseFunctionBody(fset *token.FileSet, body string) ([]ast.Stmt, error) {
+	bodySrc := fmt.Sprintf("package main\nfunc temp() {\n%s\n}", body)
+	bodyFile, err := parser.ParseFile(fset, "", bodySrc, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse generated body: %w\n---\n%s", err, body)
+	}
+	return bodyFile.Decls[0].(*ast.FuncDecl).Body.List, nil
+}
+
+func upsertFunc(node *ast.File, name string, body []ast.Stmt) {
+	var found bool
+	astutil.Apply(node, func(cursor *astutil.Cursor) bool {
+		fn, ok := cursor.Node().(*ast.FuncDecl)
+		if !ok || fn.Name.Name != name {
+			return true
+		}
+		found = true
+		fn.Body.List = body
+		return false // Stop searching
+	}, nil)
+
+	if !found {
+		// Create the function declaration
+		fn := &ast.FuncDecl{
+			Name: ast.NewIdent(name),
+			Type: &ast.FuncType{
+				Params:  &ast.FieldList{},
+				Results: nil,
+			},
+			Body: &ast.BlockStmt{
+				List: body,
+			},
+		}
+		node.Decls = append(node.Decls, fn)
+	}
+}
+
+func parseFuncDecl(fset *token.FileSet, src string) (*ast.FuncDecl, error) {
+	fileSrc := fmt.Sprintf("package main\n%s", src)
+	file, err := parser.ParseFile(fset, "", fileSrc, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse generated decl: %w\n---\n%s", err, src)
+	}
+	return file.Decls[0].(*ast.FuncDecl), nil
+}
+
+func upsertFuncDecl(node *ast.File, name string, decl *ast.FuncDecl) {
+	var found bool
+	astutil.Apply(node, func(cursor *astutil.Cursor) bool {
+		fn, ok := cursor.Node().(*ast.FuncDecl)
+		if !ok || fn.Name.Name != name {
+			return true
+		}
+		found = true
+		*fn = *decl
+		return false // Stop searching
+	}, nil)
+
+	if !found {
+		node.Decls = append(node.Decls, decl)
+	}
+}
+
+func generateGetKnownTypes(w io.Writer, pkgName string, knownTypes []parser_.TypeInfo) error {
+	fmt.Fprintf(w, "// GetKnownTypes returns a list of all types that have validation rules.\n")
+	fmt.Fprintf(w, "func GetKnownTypes() []any {\n")
+	fmt.Fprintf(w, "return []any{\n")
+	for _, t := range knownTypes {
+		if t.PackageName == pkgName {
+			fmt.Fprintf(w, "%s{},\n", t.TypeName)
+		} else {
+			fmt.Fprintf(w, "%s.%s{},\n", t.PackageName, t.TypeName)
+		}
+	}
+	fmt.Fprintf(w, "}\n")
+	fmt.Fprintf(w, "}\n")
 	return nil
 }
 

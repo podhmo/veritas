@@ -1,17 +1,14 @@
-package validation
+package main
 
 import (
 	veritas "github.com/podhmo/veritas"
 )
 
 func setupValidation() {
-	veritas.Register("testpkg/a.User", veritas.ValidationRuleSet{
-		TypeRules: []string{
-			`self.Email != ""`,
-		},
+	veritas.Register("github.com/podhmo/veritas/examples/codegen-onefile.User", veritas.ValidationRuleSet{
 		FieldRules: map[string][]string{
-			"Email": {
-				`self != "" && self.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')`,
+			"Age": {
+				`self != 0`,
 			},
 			"Name": {
 				`self != ""`,
